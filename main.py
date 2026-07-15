@@ -56,7 +56,7 @@ class TenantTrackerApp(ctk.CTk):
         self.tenant_content = ctk.CTkFrame(self.tab_tenants, fg_color="transparent")
         self.tenant_content.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # Left: Scrollable Input Form (Created but NOT packed yet)
+        # Left: Scrollable Input Form
         self.form_frame = ctk.CTkScrollableFrame(self.tenant_content, width=350, label_text="Add New Tenant")
 
         self.contact_var = ctk.StringVar()
@@ -75,9 +75,8 @@ class TenantTrackerApp(ctk.CTk):
             lbl.pack(anchor="w", padx=10, pady=(5, 0))
 
             if field in ["Date Started", "Move Out Date"]:
-                # Heavily styled DateEntry to match CustomTkinter
                 ent = DateEntry(
-                    self.form_frame, width=45, font=('Arial', 11),
+                    self.form_frame, width=45, font=('Segoe UI', 11),
                     background='#1f538d', foreground='white', borderwidth=0,
                     headersbackground='#1f538d', headersforeground='white',
                     selectbackground='#14375e', selectforeground='white',
@@ -109,41 +108,64 @@ class TenantTrackerApp(ctk.CTk):
         self.save_btn = ctk.CTkButton(self.form_frame, text="Save Tenant", command=self.save_tenant_to_db, fg_color="green", hover_color="darkgreen")
         self.save_btn.pack(pady=20, padx=10, fill="x")
 
-        # Right: Display Table (Packed initially so it takes full screen)
+        # Right: Display Table Area
         self.table_frame = ctk.CTkFrame(self.tenant_content)
         self.table_frame.pack(side="right", fill="both", expand=True)
         
-        # Upgraded Table Styling (Larger font, taller rows)
+        # Upgraded Table Styling (Segoe UI font, cleaner spacing)
         style = ttk.Style()
         style.theme_use("default")
         style.configure("Treeview", background="#2b2b2b", foreground="white", 
-                        rowheight=35, font=('Arial', 11), # Increased row height and font
+                        rowheight=40, font=('Segoe UI', 12),
                         fieldbackground="#2b2b2b", bordercolor="#343638", borderwidth=0)
         style.map('Treeview', background=[('selected', '#1f538d')])
         style.configure("Treeview.Heading", background="#565b5e", foreground="white", 
-                        font=('Arial', 12, 'bold'), relief="flat") # Bolder, larger headers
+                        font=('Segoe UI', 13, 'bold'), relief="flat")
         style.map("Treeview.Heading", background=[('active', '#343638')])
 
-        columns = ("ID", "Name", "Room", "Move In", "Monthly", "Contact")
+        # Define ALL columns
+        columns = (
+            "ID", "Name", "Address", "Room", "Started", "Term", 
+            "Move Out", "Monthly", "Valid ID", "Job", "Messenger", 
+            "Email", "Contact", "Agreement", "Advance", "Deposit"
+        )
         self.tenant_table = ttk.Treeview(self.table_frame, columns=columns, show="headings")
         
+        # Scrollbars for the massive table
+        self.tree_scroll_y = ctk.CTkScrollbar(self.table_frame, orientation="vertical", command=self.tenant_table.yview)
+        self.tree_scroll_y.pack(side="right", fill="y", pady=(10, 0))
+
+        self.tree_scroll_x = ctk.CTkScrollbar(self.table_frame, orientation="horizontal", command=self.tenant_table.xview)
+        self.tree_scroll_x.pack(side="bottom", fill="x", padx=(10, 0))
+
+        self.tenant_table.configure(yscrollcommand=self.tree_scroll_y.set, xscrollcommand=self.tree_scroll_x.set)
+        
+        # Headings & Widths
         for col in columns:
             self.tenant_table.heading(col, text=col)
-            self.tenant_table.column(col, anchor="center")
-        
-        # Adjusted column widths for the larger table
-        self.tenant_table.column("ID", width=50)
+            
+        # Set specific widths (allow some fields to be wider to read easier)
+        self.tenant_table.column("ID", width=50, anchor="center")
         self.tenant_table.column("Name", width=200, anchor="w")
-        self.tenant_table.column("Room", width=100)
-        self.tenant_table.column("Move In", width=150)
-        self.tenant_table.column("Monthly", width=120)
-        self.tenant_table.column("Contact", width=150)
+        self.tenant_table.column("Address", width=250, anchor="w")
+        self.tenant_table.column("Room", width=80, anchor="center")
+        self.tenant_table.column("Started", width=120, anchor="center")
+        self.tenant_table.column("Term", width=100, anchor="center")
+        self.tenant_table.column("Move Out", width=120, anchor="center")
+        self.tenant_table.column("Monthly", width=100, anchor="center")
+        self.tenant_table.column("Valid ID", width=150, anchor="w")
+        self.tenant_table.column("Job", width=150, anchor="w")
+        self.tenant_table.column("Messenger", width=150, anchor="w")
+        self.tenant_table.column("Email", width=200, anchor="w")
+        self.tenant_table.column("Contact", width=150, anchor="center")
+        self.tenant_table.column("Agreement", width=100, anchor="center")
+        self.tenant_table.column("Advance", width=100, anchor="center")
+        self.tenant_table.column("Deposit", width=100, anchor="center")
         
-        self.tenant_table.pack(fill="both", expand=True, padx=10, pady=10)
+        self.tenant_table.pack(fill="both", expand=True, padx=(10, 0), pady=(10, 0))
         self.load_tenants_from_db()
 
     def toggle_form(self):
-        # Slides the form in and out
         if self.form_visible:
             self.form_frame.pack_forget()
             self.toggle_btn.configure(text="+ Add New Tenant", fg_color="#1f538d", hover_color="#14375e")
@@ -190,8 +212,6 @@ class TenantTrackerApp(ctk.CTk):
             var.set(0)
             
         self.load_tenants_from_db()
-        
-        # Automatically close the form after successful save
         self.toggle_form()
 
     def load_tenants_from_db(self):
@@ -200,11 +220,21 @@ class TenantTrackerApp(ctk.CTk):
             
         conn = sqlite3.connect('tenant_tracker.db')
         cursor = conn.cursor()
-        cursor.execute("SELECT id, full_name, room_number, date_started, monthly_due, contact_number FROM tenants")
+        
+        # Select ALL fields from the database
+        cursor.execute("SELECT * FROM tenants")
         rows = cursor.fetchall()
         
         for row in rows:
-            self.tenant_table.insert("", "end", values=row)
+            formatted_row = list(row)
+            
+            # Convert the 1 or 0 checkbox data into a clear "Yes" or "No"
+            formatted_row[13] = "Yes" if formatted_row[13] == 1 else "No" # Agreement
+            formatted_row[14] = "Yes" if formatted_row[14] == 1 else "No" # Advance
+            formatted_row[15] = "Yes" if formatted_row[15] == 1 else "No" # Deposit
+            
+            self.tenant_table.insert("", "end", values=formatted_row)
+            
         conn.close()
 
 if __name__ == "__main__":
