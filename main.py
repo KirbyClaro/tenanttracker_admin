@@ -14,20 +14,17 @@ class TenantTrackerApp(ctk.CTk):
 
         # Window Setup
         self.title("TenantTracker Admin")
-        self.geometry("1100x700")
+        self.geometry("1200x750") # Made the window slightly wider for the new table columns
         
-        # Setup Main Tabview
-        self.tabview = ctk.CTkTabview(self, width=1050, height=650)
+        self.tabview = ctk.CTkTabview(self, width=1150, height=700)
         self.tabview.pack(padx=20, pady=20, fill="both", expand=True)
 
-        # Create Tabs
         self.tab_tenants = self.tabview.add("Tenant Information")
         self.tab_financials = self.tabview.add("Financials")
         self.tab_settings = self.tabview.add("Settings")
 
-        # Form State
         self.form_visible = False
-        self.editing_tenant_id = None  # Tracks if we are editing an existing tenant
+        self.editing_tenant_id = None
 
         self.setup_tenant_tab()
 
@@ -39,36 +36,60 @@ class TenantTrackerApp(ctk.CTk):
         self.title_label = ctk.CTkLabel(self.header_frame, text="Tenant Management", font=ctk.CTkFont(size=24, weight="bold"))
         self.title_label.pack(side="left")
 
-        # Toggle Form Button
-        self.toggle_btn = ctk.CTkButton(
-            self.header_frame, 
-            text="+ Add New Tenant", 
-            command=self.toggle_form, 
-            fg_color="#1f538d", 
-            hover_color="#14375e"
-        )
+        self.toggle_btn = ctk.CTkButton(self.header_frame, text="+ Add New Tenant", command=self.toggle_form, fg_color="#1f538d", hover_color="#14375e")
         self.toggle_btn.pack(side="left", padx=20)
 
         self.clock_label = ctk.CTkLabel(self.header_frame, text="", font=ctk.CTkFont(size=14))
         self.clock_label.pack(side="right")
         self.update_clock()
 
+        # --- SEARCH & FILTER BAR ---
+        self.search_frame = ctk.CTkFrame(self.tab_tenants, fg_color="#2b2b2b")
+        self.search_frame.pack(fill="x", padx=10, pady=(0, 10))
+
+        # Status Filter
+        self.filter_var = ctk.StringVar(value="Active")
+        self.status_filter = ctk.CTkOptionMenu(
+            self.search_frame, 
+            values=["Active", "Archived", "All"], 
+            variable=self.filter_var,
+            command=self.trigger_search,
+            width=120
+        )
+        self.status_filter.pack(side="left", padx=10, pady=10)
+
+        # Search Box
+        self.search_var = ctk.StringVar()
+        self.search_var.trace_add("write", self.trigger_search) # Instantly searches as you type
+        self.search_entry = ctk.CTkEntry(
+            self.search_frame, 
+            placeholder_text="Search by Name or Room...", 
+            textvariable=self.search_var, 
+            width=300
+        )
+        self.search_entry.pack(side="left", padx=(0, 10), pady=10)
+
         # --- CONTENT LAYOUT ---
         self.tenant_content = ctk.CTkFrame(self.tab_tenants, fg_color="transparent")
-        self.tenant_content.pack(fill="both", expand=True, padx=10, pady=10)
+        self.tenant_content.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
         # Left: Scrollable Input Form
         self.form_frame = ctk.CTkScrollableFrame(self.tenant_content, width=350, label_text="Tenant Details")
 
         self.contact_var = ctk.StringVar()
         self.contact_var.trace_add("write", self.validate_contact)
+        
+        self.em_contact_var = ctk.StringVar()
+        self.em_contact_var.trace_add("write", self.validate_em_contact)
 
         self.entries = {}
+        
+        # New Field Array
         self.fields = [
-            "Full Name", "Address", "Room Number", "Date Started",
-            "Lease Term", "Move Out Date", "Monthly Due",
-            "Valid ID", "Working/Job", "Messenger Link",
-            "Email", "Contact Number"
+            "Status", "Full Name", "Address", "Room Number", "Date Started",
+            "Lease Term", "Move Out Date", "Monthly Due", "Valid ID", "Working/Job",
+            "Messenger Link", "Email", "Contact Number", "Emergency Name",
+            "Emergency Number", "Occupants", "Vehicle Info"
         ]
 
         for field in self.fields:
@@ -76,25 +97,31 @@ class TenantTrackerApp(ctk.CTk):
             lbl.pack(anchor="w", padx=10, pady=(5, 0))
 
             if field in ["Date Started", "Move Out Date"]:
-                ent = DateEntry(
-                    self.form_frame, width=45, font=('Segoe UI', 11),
-                    background='#1f538d', foreground='white', borderwidth=0,
-                    headersbackground='#1f538d', headersforeground='white',
-                    selectbackground='#14375e', selectforeground='white',
-                    fieldbackground='#343638', date_pattern='yyyy-mm-dd'
-                )
+                ent = DateEntry(self.form_frame, width=45, font=('Segoe UI', 11), background='#1f538d', foreground='white', borderwidth=0, date_pattern='yyyy-mm-dd')
                 ent.pack(padx=10, pady=(0, 5), ipady=4)
                 self.entries[field] = ent
-
+            elif field == "Status":
+                ent = ctk.CTkOptionMenu(self.form_frame, values=["Active", "Archived"], width=300)
+                ent.pack(padx=10, pady=(0, 5))
+                self.entries[field] = ent
             elif field == "Contact Number":
                 ent = ctk.CTkEntry(self.form_frame, width=300, textvariable=self.contact_var)
                 ent.pack(padx=10, pady=(0, 5))
                 self.entries[field] = ent
-
+            elif field == "Emergency Number":
+                ent = ctk.CTkEntry(self.form_frame, width=300, textvariable=self.em_contact_var)
+                ent.pack(padx=10, pady=(0, 5))
+                self.entries[field] = ent
             else:
                 ent = ctk.CTkEntry(self.form_frame, width=300)
                 ent.pack(padx=10, pady=(0, 5))
                 self.entries[field] = ent
+
+        # Remarks / Notes Box (Special handling since it's multiline)
+        lbl_notes = ctk.CTkLabel(self.form_frame, text="Remarks / Notes")
+        lbl_notes.pack(anchor="w", padx=10, pady=(5, 0))
+        self.notes_box = ctk.CTkTextbox(self.form_frame, width=300, height=80)
+        self.notes_box.pack(padx=10, pady=(0, 5))
 
         self.check_vars = {
             "Agreement Signed": ctk.IntVar(),
@@ -115,20 +142,19 @@ class TenantTrackerApp(ctk.CTk):
         
         style = ttk.Style()
         style.theme_use("default")
-        style.configure("Treeview", background="#2b2b2b", foreground="white", 
-                        rowheight=40, font=('Segoe UI', 12),
-                        fieldbackground="#2b2b2b", bordercolor="#343638", borderwidth=0)
+        style.configure("Treeview", background="#2b2b2b", foreground="white", rowheight=40, font=('Segoe UI', 11), fieldbackground="#2b2b2b", bordercolor="#343638", borderwidth=0)
         style.map('Treeview', background=[('selected', '#1f538d')])
-        style.configure("Treeview.Heading", background="#565b5e", foreground="white", 
-                        font=('Segoe UI', 13, 'bold'), relief="flat")
+        style.configure("Treeview.Heading", background="#565b5e", foreground="white", font=('Segoe UI', 12, 'bold'), relief="flat")
         style.map("Treeview.Heading", background=[('active', '#343638')])
 
-        columns = (
-            "ID", "Name", "Address", "Room", "Started", "Term", 
+        # Expanded Columns Array
+        self.columns = (
+            "ID", "Status", "Name", "Address", "Room", "Started", "Term", 
             "Move Out", "Monthly", "Valid ID", "Job", "Messenger", 
-            "Email", "Contact", "Agreement", "Advance", "Deposit"
+            "Email", "Contact", "Em. Name", "Em. Contact", "Occupants",
+            "Vehicle", "Notes", "Agreement", "Advance", "Deposit"
         )
-        self.tenant_table = ttk.Treeview(self.table_frame, columns=columns, show="headings")
+        self.tenant_table = ttk.Treeview(self.table_frame, columns=self.columns, show="headings")
         
         self.tree_scroll_y = ctk.CTkScrollbar(self.table_frame, orientation="vertical", command=self.tenant_table.yview)
         self.tree_scroll_y.pack(side="right", fill="y", pady=(10, 0))
@@ -138,29 +164,20 @@ class TenantTrackerApp(ctk.CTk):
 
         self.tenant_table.configure(yscrollcommand=self.tree_scroll_y.set, xscrollcommand=self.tree_scroll_x.set)
         
-        for col in columns:
+        for col in self.columns:
             self.tenant_table.heading(col, text=col)
+            self.tenant_table.column(col, width=120, anchor="center") # Default width
             
-        self.tenant_table.column("ID", width=50, anchor="center")
-        self.tenant_table.column("Name", width=200, anchor="w")
-        self.tenant_table.column("Address", width=250, anchor="w")
-        self.tenant_table.column("Room", width=80, anchor="center")
-        self.tenant_table.column("Started", width=120, anchor="center")
-        self.tenant_table.column("Term", width=100, anchor="center")
-        self.tenant_table.column("Move Out", width=120, anchor="center")
-        self.tenant_table.column("Monthly", width=100, anchor="center")
-        self.tenant_table.column("Valid ID", width=150, anchor="w")
-        self.tenant_table.column("Job", width=150, anchor="w")
-        self.tenant_table.column("Messenger", width=150, anchor="w")
-        self.tenant_table.column("Email", width=200, anchor="w")
-        self.tenant_table.column("Contact", width=150, anchor="center")
-        self.tenant_table.column("Agreement", width=100, anchor="center")
-        self.tenant_table.column("Advance", width=100, anchor="center")
-        self.tenant_table.column("Deposit", width=100, anchor="center")
+        # Specific Adjustments
+        self.tenant_table.column("ID", width=40)
+        self.tenant_table.column("Name", width=180, anchor="w")
+        self.tenant_table.column("Address", width=200, anchor="w")
+        self.tenant_table.column("Room", width=60)
+        self.tenant_table.column("Notes", width=250, anchor="w")
         
         self.tenant_table.pack(fill="both", expand=True, padx=(10, 0), pady=(10, 0))
 
-        # --- ACTION BUTTONS (Below the Table) ---
+        # --- ACTION BUTTONS ---
         self.action_frame = ctk.CTkFrame(self.table_frame, fg_color="transparent")
         self.action_frame.pack(fill="x", padx=10, pady=(10, 0))
 
@@ -177,8 +194,6 @@ class TenantTrackerApp(ctk.CTk):
             self.form_frame.pack_forget()
             self.toggle_btn.configure(text="+ Add New Tenant", fg_color="#1f538d", hover_color="#14375e")
             self.form_visible = False
-            
-            # Reset form to blank state if we were editing
             if self.editing_tenant_id:
                 self.clear_form()
         else:
@@ -187,10 +202,17 @@ class TenantTrackerApp(ctk.CTk):
             self.form_visible = True
 
     def validate_contact(self, *args):
-        current_value = self.contact_var.get()
-        numbers_only = ''.join(filter(str.isdigit, current_value))
-        if current_value != numbers_only:
-            self.contact_var.set(numbers_only)
+        cv = self.contact_var.get()
+        no_letters = ''.join(filter(str.isdigit, cv))
+        if cv != no_letters: self.contact_var.set(no_letters)
+
+    def validate_em_contact(self, *args):
+        cv = self.em_contact_var.get()
+        no_letters = ''.join(filter(str.isdigit, cv))
+        if cv != no_letters: self.em_contact_var.set(no_letters)
+
+    def trigger_search(self, *args):
+        self.load_tenants_from_db()
 
     def update_clock(self):
         current_time = time.strftime('%I:%M:%S %p | %B %d, %Y')
@@ -198,86 +220,60 @@ class TenantTrackerApp(ctk.CTk):
         self.after(1000, self.update_clock)
 
     def load_for_editing(self):
-        # Grab the currently selected row
         selected_item = self.tenant_table.selection()
-        if not selected_item:
-            return  # Nothing is selected
+        if not selected_item: return
             
         item_values = self.tenant_table.item(selected_item[0])['values']
         
-        # Open the form if it is closed
         if not self.form_visible:
             self.toggle_form()
 
-        # Set the editing ID and change button visuals
         self.editing_tenant_id = item_values[0]
         self.save_btn.configure(text="Update Tenant", fg_color="#B8860B", hover_color="#8B6508")
         
-        # Populate input fields with the selected data
-        # Note: item_values indices map directly to the columns defined in the table
-        self.entries["Full Name"].delete(0, 'end')
-        self.entries["Full Name"].insert(0, str(item_values[1]) if item_values[1] != "None" else "")
-        
-        self.entries["Address"].delete(0, 'end')
-        self.entries["Address"].insert(0, str(item_values[2]) if item_values[2] != "None" else "")
-        
-        self.entries["Room Number"].delete(0, 'end')
-        self.entries["Room Number"].insert(0, str(item_values[3]) if item_values[3] != "None" else "")
-        
-        self.entries["Date Started"].set_date(item_values[4])
-        
-        self.entries["Lease Term"].delete(0, 'end')
-        self.entries["Lease Term"].insert(0, str(item_values[5]) if item_values[5] != "None" else "")
-        
-        self.entries["Move Out Date"].set_date(item_values[6])
-        
-        self.entries["Monthly Due"].delete(0, 'end')
-        self.entries["Monthly Due"].insert(0, str(item_values[7]) if item_values[7] != "None" else "")
-        
-        self.entries["Valid ID"].delete(0, 'end')
-        self.entries["Valid ID"].insert(0, str(item_values[8]) if item_values[8] != "None" else "")
-        
-        self.entries["Working/Job"].delete(0, 'end')
-        self.entries["Working/Job"].insert(0, str(item_values[9]) if item_values[9] != "None" else "")
-        
-        self.entries["Messenger Link"].delete(0, 'end')
-        self.entries["Messenger Link"].insert(0, str(item_values[10]) if item_values[10] != "None" else "")
-        
-        self.entries["Email"].delete(0, 'end')
-        self.entries["Email"].insert(0, str(item_values[11]) if item_values[11] != "None" else "")
-        
-        self.entries["Contact Number"].delete(0, 'end')
-        self.entries["Contact Number"].insert(0, str(item_values[12]) if item_values[12] != "None" else "")
+        # Mapping item_values indices (1 to 17) directly to our self.fields list
+        for idx, field in enumerate(self.fields):
+            val = str(item_values[idx + 1]) if item_values[idx + 1] != "None" else ""
+            if field in ["Date Started", "Move Out Date"]:
+                self.entries[field].set_date(val)
+            elif field == "Status":
+                self.entries[field].set(val)
+            else:
+                self.entries[field].delete(0, 'end')
+                self.entries[field].insert(0, val)
 
-        # Populate Checkboxes
-        self.check_vars["Agreement Signed"].set(1 if item_values[13] == "Yes" else 0)
-        self.check_vars["Advance Paid"].set(1 if item_values[14] == "Yes" else 0)
-        self.check_vars["Deposit Paid"].set(1 if item_values[15] == "Yes" else 0)
+        # Notes Box (Index 18)
+        self.notes_box.delete("1.0", "end")
+        self.notes_box.insert("1.0", str(item_values[18]) if item_values[18] != "None" else "")
+
+        # Checkboxes (Indices 19, 20, 21)
+        self.check_vars["Agreement Signed"].set(1 if item_values[19] == "Yes" else 0)
+        self.check_vars["Advance Paid"].set(1 if item_values[20] == "Yes" else 0)
+        self.check_vars["Deposit Paid"].set(1 if item_values[21] == "Yes" else 0)
 
     def delete_tenant(self):
         selected_item = self.tenant_table.selection()
-        if not selected_item:
-            return # Nothing is selected
-            
-        # Get the ID of the selected tenant
+        if not selected_item: return
         tenant_id = self.tenant_table.item(selected_item[0])['values'][0]
         
-        # Delete from SQLite database
         conn = sqlite3.connect('tenant_tracker.db')
         cursor = conn.cursor()
         cursor.execute("DELETE FROM tenants WHERE id = ?", (tenant_id,))
         conn.commit()
         conn.close()
-        
         self.load_tenants_from_db()
 
     def clear_form(self):
-        # Wipes all data from the form
         for field, ent in self.entries.items():
             if field in ["Date Started", "Move Out Date"]:
                 ent.set_date(time.strftime('%Y-%m-%d'))
+            elif field == "Status":
+                ent.set("Active")
             else:
                 ent.delete(0, 'end')
+                
+        self.notes_box.delete("1.0", "end")
+        
         for var in self.check_vars.values():
             var.set(0)
             
@@ -286,29 +282,33 @@ class TenantTrackerApp(ctk.CTk):
 
     def save_tenant_to_db(self):
         data = [self.entries[field].get() for field in self.fields]
+        
+        # Grab Notes text box (stripping the trailing newline tkinter adds)
+        data.append(self.notes_box.get("1.0", "end-1c")) 
+        
         data.extend([self.check_vars[check].get() for check in self.check_vars])
 
         conn = sqlite3.connect('tenant_tracker.db')
         cursor = conn.cursor()
         
         if self.editing_tenant_id:
-            # If editing, we UPDATE instead of INSERT
             data.append(self.editing_tenant_id)
             cursor.execute('''
                 UPDATE tenants SET
-                    full_name=?, address=?, room_number=?, date_started=?, lease_term=?, move_out_date=?,
+                    status=?, full_name=?, address=?, room_number=?, date_started=?, lease_term=?, move_out_date=?,
                     monthly_due=?, valid_id=?, job=?, messenger_link=?, email=?, contact_number=?,
+                    emergency_name=?, emergency_number=?, occupants=?, vehicle_info=?, notes=?,
                     agreement_signed=?, advance_paid=?, deposit_paid=?
                 WHERE id=?
             ''', data)
         else:
-            # If completely new, we INSERT
             cursor.execute('''
                 INSERT INTO tenants (
-                    full_name, address, room_number, date_started, lease_term, move_out_date,
+                    status, full_name, address, room_number, date_started, lease_term, move_out_date,
                     monthly_due, valid_id, job, messenger_link, email, contact_number,
+                    emergency_name, emergency_number, occupants, vehicle_info, notes,
                     agreement_signed, advance_paid, deposit_paid
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', data)
             
         conn.commit()
@@ -324,14 +324,30 @@ class TenantTrackerApp(ctk.CTk):
             
         conn = sqlite3.connect('tenant_tracker.db')
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM tenants")
+        
+        # Apply Filters and Search
+        status_filter = self.filter_var.get()
+        search_text = self.search_var.get()
+        
+        query = "SELECT * FROM tenants WHERE 1=1"
+        params = []
+        
+        if status_filter != "All":
+            query += " AND status = ?"
+            params.append(status_filter)
+            
+        if search_text:
+            query += " AND (full_name LIKE ? OR room_number LIKE ?)"
+            params.extend([f"%{search_text}%", f"%{search_text}%"])
+            
+        cursor.execute(query, params)
         rows = cursor.fetchall()
         
         for row in rows:
             formatted_row = list(row)
-            formatted_row[13] = "Yes" if formatted_row[13] == 1 else "No" 
-            formatted_row[14] = "Yes" if formatted_row[14] == 1 else "No" 
-            formatted_row[15] = "Yes" if formatted_row[15] == 1 else "No" 
+            formatted_row[19] = "Yes" if formatted_row[19] == 1 else "No" 
+            formatted_row[20] = "Yes" if formatted_row[20] == 1 else "No" 
+            formatted_row[21] = "Yes" if formatted_row[21] == 1 else "No" 
             
             self.tenant_table.insert("", "end", values=formatted_row)
             

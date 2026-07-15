@@ -4,10 +4,11 @@ def init_db():
     conn = sqlite3.connect('tenant_tracker.db')
     cursor = conn.cursor()
 
-    # Create Tenants Table
+    # Create Tenants Table (Upgraded with Status, Emergency Contacts, Occupants, Vehicle, and Notes)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS tenants (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            status TEXT DEFAULT 'Active',
             full_name TEXT NOT NULL,
             address TEXT,
             room_number TEXT,
@@ -20,6 +21,11 @@ def init_db():
             messenger_link TEXT,
             email TEXT,
             contact_number TEXT,
+            emergency_name TEXT,
+            emergency_number TEXT,
+            occupants TEXT,
+            vehicle_info TEXT,
+            notes TEXT,
             agreement_signed INTEGER DEFAULT 0,
             advance_paid INTEGER DEFAULT 0,
             deposit_paid INTEGER DEFAULT 0
@@ -30,14 +36,14 @@ def init_db():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS financials (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            type TEXT, -- e.g., 'water', 'electric', 'internet', 'garbage'
+            type TEXT,
             amount REAL,
             due_date TEXT,
             status TEXT DEFAULT 'pending'
         )
     ''')
 
-    # Create Settings Table (for Admin Password)
+    # Create Settings Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS settings (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
