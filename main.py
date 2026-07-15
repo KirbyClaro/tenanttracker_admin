@@ -1,4 +1,5 @@
 import customtkinter as ctk
+import tkinter.ttk as ttk
 import time
 import sqlite3
 from database import init_db
@@ -76,12 +77,40 @@ class TenantTrackerApp(ctk.CTk):
         self.save_btn = ctk.CTkButton(self.form_frame, text="Save Tenant", command=self.save_tenant_to_db, fg_color="green", hover_color="darkgreen")
         self.save_btn.pack(pady=20, padx=10, fill="x")
 
-        # Right: Display Table (Placeholder for next step)
+        # Right: Display Table
         self.table_frame = ctk.CTkFrame(self.tenant_content)
         self.table_frame.pack(side="right", fill="both", expand=True)
         
-        self.table_placeholder = ctk.CTkLabel(self.table_frame, text="[ Tenant Data Table Will Appear Here ]", text_color="gray")
-        self.table_placeholder.pack(expand=True)
+        # Style the Treeview to match the dark theme
+        style = ttk.Style()
+        style.theme_use("default")
+        style.configure("Treeview", 
+                        background="#2b2b2b", 
+                        foreground="white", 
+                        rowheight=25, 
+                        fieldbackground="#2b2b2b", 
+                        bordercolor="#343638", 
+                        borderwidth=0)
+        style.map('Treeview', background=[('selected', '#1f538d')])
+        style.configure("Treeview.Heading", background="#565b5e", foreground="white", relief="flat")
+        style.map("Treeview.Heading", background=[('active', '#343638')])
+
+        # Define Columns (Keep it to the most important info to avoid side-scrolling)
+        columns = ("ID", "Name", "Room", "Move In", "Monthly", "Contact")
+        self.tenant_table = ttk.Treeview(self.table_frame, columns=columns, show="headings")
+        
+        # Setup Headings & Column Widths
+        for col in columns:
+            self.tenant_table.heading(col, text=col)
+            self.tenant_table.column(col, width=100, anchor="center")
+        
+        self.tenant_table.column("ID", width=40)
+        self.tenant_table.column("Name", width=150, anchor="w")
+        
+        self.tenant_table.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # Load data on startup
+        self.load_tenants_from_db()
 
     def update_clock(self):
         current_time = time.strftime('%I:%M:%S %p | %B %d, %Y')
@@ -112,7 +141,26 @@ class TenantTrackerApp(ctk.CTk):
         for var in self.check_vars.values():
             var.set(0)
             
-        print("Tenant saved to database successfully!")
+        # Refresh the table immediately to show the new tenant
+        self.load_tenants_from_db()
+
+    def load_tenants_from_db(self):
+        # Clear existing rows in the table
+        for item in self.tenant_table.get_children():
+            self.tenant_table.delete(item)
+            
+        conn = sqlite3.connect('tenant_tracker.db')
+        cursor = conn.cursor()
+        
+        # Fetch key columns for the summary table
+        cursor.execute("SELECT id, full_name, room_number, date_started, monthly_due, contact_number FROM tenants")
+        rows = cursor.fetchall()
+        
+        # Insert rows into the Treeview
+        for row in rows:
+            self.tenant_table.insert("", "end", values=row)
+            
+        conn.close()
 
 if __name__ == "__main__":
     ctk.set_appearance_mode("System")
