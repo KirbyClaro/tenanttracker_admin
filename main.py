@@ -3,7 +3,7 @@ import tkinter.ttk as ttk
 import time
 import sqlite3
 from database import init_db
-from tkcalendar import DateEntry 
+from tkcalendar import DateEntry
 
 # Initialize database on launch
 init_db()
@@ -25,6 +25,9 @@ class TenantTrackerApp(ctk.CTk):
         self.tab_financials = self.tabview.add("Financials")
         self.tab_settings = self.tabview.add("Settings")
 
+        # Form Visibility State
+        self.form_visible = False
+
         self.setup_tenant_tab()
 
     def setup_tenant_tab(self):
@@ -35,23 +38,30 @@ class TenantTrackerApp(ctk.CTk):
         self.title_label = ctk.CTkLabel(self.header_frame, text="Tenant Management", font=ctk.CTkFont(size=24, weight="bold"))
         self.title_label.pack(side="left")
 
+        # Toggle Form Button
+        self.toggle_btn = ctk.CTkButton(
+            self.header_frame, 
+            text="+ Add New Tenant", 
+            command=self.toggle_form, 
+            fg_color="#1f538d", 
+            hover_color="#14375e"
+        )
+        self.toggle_btn.pack(side="left", padx=20)
+
         self.clock_label = ctk.CTkLabel(self.header_frame, text="", font=ctk.CTkFont(size=14))
         self.clock_label.pack(side="right")
         self.update_clock()
 
-        # --- CONTENT LAYOUT (Left Form, Right Table) ---
+        # --- CONTENT LAYOUT ---
         self.tenant_content = ctk.CTkFrame(self.tab_tenants, fg_color="transparent")
         self.tenant_content.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # Left: Scrollable Input Form
+        # Left: Scrollable Input Form (Created but NOT packed yet)
         self.form_frame = ctk.CTkScrollableFrame(self.tenant_content, width=350, label_text="Add New Tenant")
-        self.form_frame.pack(side="left", fill="y", padx=(0, 10))
 
-        # Setup Number Validation Variable
         self.contact_var = ctk.StringVar()
         self.contact_var.trace_add("write", self.validate_contact)
 
-        # Form Fields Logic
         self.entries = {}
         fields = [
             "Full Name", "Address", "Room Number", "Date Started",
@@ -64,13 +74,14 @@ class TenantTrackerApp(ctk.CTk):
             lbl = ctk.CTkLabel(self.form_frame, text=field)
             lbl.pack(anchor="w", padx=10, pady=(5, 0))
 
-            # Render specific widgets based on the field name
             if field in ["Date Started", "Move Out Date"]:
+                # Heavily styled DateEntry to match CustomTkinter
                 ent = DateEntry(
-                    self.form_frame, width=45, background='#343638',
-                    foreground='white', borderwidth=0, date_pattern='yyyy-mm-dd',
+                    self.form_frame, width=45, font=('Arial', 11),
+                    background='#1f538d', foreground='white', borderwidth=0,
                     headersbackground='#1f538d', headersforeground='white',
-                    selectbackground='#1f538d', selectforeground='white'
+                    selectbackground='#14375e', selectforeground='white',
+                    fieldbackground='#343638', date_pattern='yyyy-mm-dd'
                 )
                 ent.pack(padx=10, pady=(0, 5), ipady=4)
                 self.entries[field] = ent
@@ -85,7 +96,6 @@ class TenantTrackerApp(ctk.CTk):
                 ent.pack(padx=10, pady=(0, 5))
                 self.entries[field] = ent
 
-        # Checkboxes
         self.check_vars = {
             "Agreement Signed": ctk.IntVar(),
             "Advance Paid": ctk.IntVar(),
@@ -96,20 +106,22 @@ class TenantTrackerApp(ctk.CTk):
             chk = ctk.CTkCheckBox(self.form_frame, text=check_name, variable=var)
             chk.pack(anchor="w", padx=10, pady=5)
 
-        # Save Button
         self.save_btn = ctk.CTkButton(self.form_frame, text="Save Tenant", command=self.save_tenant_to_db, fg_color="green", hover_color="darkgreen")
         self.save_btn.pack(pady=20, padx=10, fill="x")
 
-        # Right: Display Table
+        # Right: Display Table (Packed initially so it takes full screen)
         self.table_frame = ctk.CTkFrame(self.tenant_content)
         self.table_frame.pack(side="right", fill="both", expand=True)
         
+        # Upgraded Table Styling (Larger font, taller rows)
         style = ttk.Style()
         style.theme_use("default")
-        style.configure("Treeview", background="#2b2b2b", foreground="white", rowheight=25, 
+        style.configure("Treeview", background="#2b2b2b", foreground="white", 
+                        rowheight=35, font=('Arial', 11), # Increased row height and font
                         fieldbackground="#2b2b2b", bordercolor="#343638", borderwidth=0)
         style.map('Treeview', background=[('selected', '#1f538d')])
-        style.configure("Treeview.Heading", background="#565b5e", foreground="white", relief="flat")
+        style.configure("Treeview.Heading", background="#565b5e", foreground="white", 
+                        font=('Arial', 12, 'bold'), relief="flat") # Bolder, larger headers
         style.map("Treeview.Heading", background=[('active', '#343638')])
 
         columns = ("ID", "Name", "Room", "Move In", "Monthly", "Contact")
@@ -117,17 +129,31 @@ class TenantTrackerApp(ctk.CTk):
         
         for col in columns:
             self.tenant_table.heading(col, text=col)
-            self.tenant_table.column(col, width=100, anchor="center")
+            self.tenant_table.column(col, anchor="center")
         
-        self.tenant_table.column("ID", width=40)
-        self.tenant_table.column("Name", width=150, anchor="w")
+        # Adjusted column widths for the larger table
+        self.tenant_table.column("ID", width=50)
+        self.tenant_table.column("Name", width=200, anchor="w")
+        self.tenant_table.column("Room", width=100)
+        self.tenant_table.column("Move In", width=150)
+        self.tenant_table.column("Monthly", width=120)
+        self.tenant_table.column("Contact", width=150)
         
         self.tenant_table.pack(fill="both", expand=True, padx=10, pady=10)
         self.load_tenants_from_db()
 
+    def toggle_form(self):
+        # Slides the form in and out
+        if self.form_visible:
+            self.form_frame.pack_forget()
+            self.toggle_btn.configure(text="+ Add New Tenant", fg_color="#1f538d", hover_color="#14375e")
+            self.form_visible = False
+        else:
+            self.form_frame.pack(side="left", fill="y", padx=(0, 10), before=self.table_frame)
+            self.toggle_btn.configure(text="- Cancel Adding", fg_color="#8B0000", hover_color="#660000")
+            self.form_visible = True
+
     def validate_contact(self, *args):
-        # Triggers every time a user types in the Contact Number field.
-        # Strips out everything except digits.
         current_value = self.contact_var.get()
         numbers_only = ''.join(filter(str.isdigit, current_value))
         if current_value != numbers_only:
@@ -154,10 +180,9 @@ class TenantTrackerApp(ctk.CTk):
         conn.commit()
         conn.close()
 
-        # Clear form fields
         for field, ent in self.entries.items():
             if field in ["Date Started", "Move Out Date"]:
-                ent.set_date(time.strftime('%Y-%m-%d')) # Reset to today's date
+                ent.set_date(time.strftime('%Y-%m-%d'))
             else:
                 ent.delete(0, 'end')
         
@@ -165,6 +190,9 @@ class TenantTrackerApp(ctk.CTk):
             var.set(0)
             
         self.load_tenants_from_db()
+        
+        # Automatically close the form after successful save
+        self.toggle_form()
 
     def load_tenants_from_db(self):
         for item in self.tenant_table.get_children():
