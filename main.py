@@ -3,6 +3,7 @@ import tkinter.ttk as ttk
 import time
 import sqlite3
 from database import init_db
+from tkcalendar import DateEntry  # Enables the pop-out calendar
 
 # Initialize database on launch
 init_db()
@@ -46,7 +47,11 @@ class TenantTrackerApp(ctk.CTk):
         self.form_frame = ctk.CTkScrollableFrame(self.tenant_content, width=350, label_text="Add New Tenant")
         self.form_frame.pack(side="left", fill="y", padx=(0, 10))
 
-        # Form Fields
+        # Setup Number Validation Variable
+        self.contact_var = ctk.StringVar()
+        self.contact_var.trace_add("write", self.validate_contact)
+
+        # Form Fields Logic
         self.entries = {}
         fields = [
             "Full Name", "Address", "Room Number", "Date Started",
@@ -58,9 +63,27 @@ class TenantTrackerApp(ctk.CTk):
         for field in fields:
             lbl = ctk.CTkLabel(self.form_frame, text=field)
             lbl.pack(anchor="w", padx=10, pady=(5, 0))
-            ent = ctk.CTkEntry(self.form_frame, width=300)
-            ent.pack(padx=10, pady=(0, 5))
-            self.entries[field] = ent
+
+            # Render specific widgets based on the field name
+            if field in ["Date Started", "Move Out Date"]:
+                ent = DateEntry(
+                    self.form_frame, width=45, background='#343638',
+                    foreground='white', borderwidth=0, date_pattern='yyyy-mm-dd',
+                    headersbackground='#1f538d', headersforeground='white',
+                    selectbackground='#1f538d', selectforeground='white'
+                )
+                ent.pack(padx=10, pady=(0, 5), ipady=4)
+                self.entries[field] = ent
+
+            elif field == "Contact Number":
+                ent = ctk.CTkEntry(self.form_frame, width=300, textvariable=self.contact_var)
+                ent.pack(padx=10, pady=(0, 5))
+                self.entries[field] = ent
+
+            else:
+                ent = ctk.CTkEntry(self.form_frame, width=300)
+                ent.pack(padx=10, pady=(0, 5))
+                self.entries[field] = ent
 
         # Checkboxes
         self.check_vars = {
@@ -81,25 +104,17 @@ class TenantTrackerApp(ctk.CTk):
         self.table_frame = ctk.CTkFrame(self.tenant_content)
         self.table_frame.pack(side="right", fill="both", expand=True)
         
-        # Style the Treeview to match the dark theme
         style = ttk.Style()
         style.theme_use("default")
-        style.configure("Treeview", 
-                        background="#2b2b2b", 
-                        foreground="white", 
-                        rowheight=25, 
-                        fieldbackground="#2b2b2b", 
-                        bordercolor="#343638", 
-                        borderwidth=0)
+        style.configure("Treeview", background="#2b2b2b", foreground="white", rowheight=25, 
+                        fieldbackground="#2b2b2b", bordercolor="#343638", borderwidth=0)
         style.map('Treeview', background=[('selected', '#1f538d')])
         style.configure("Treeview.Heading", background="#565b5e", foreground="white", relief="flat")
         style.map("Treeview.Heading", background=[('active', '#343638')])
 
-        # Define Columns (Keep it to the most important info to avoid side-scrolling)
         columns = ("ID", "Name", "Room", "Move In", "Monthly", "Contact")
         self.tenant_table = ttk.Treeview(self.table_frame, columns=columns, show="headings")
         
-        # Setup Headings & Column Widths
         for col in columns:
             self.tenant_table.heading(col, text=col)
             self.tenant_table.column(col, width=100, anchor="center")
@@ -108,9 +123,15 @@ class TenantTrackerApp(ctk.CTk):
         self.tenant_table.column("Name", width=150, anchor="w")
         
         self.tenant_table.pack(fill="both", expand=True, padx=10, pady=10)
-
-        # Load data on startup
         self.load_tenants_from_db()
+
+    def validate_contact(self, *args):
+        # Triggers every time a user types in the Contact Number field.
+        # Strips out everything except digits.
+        current_value = self.contact_var.get()
+        numbers_only = ''.join(filter(str.isdigit, current_value))
+        if current_value != numbers_only:
+            self.contact_var.set(numbers_only)
 
     def update_clock(self):
         current_time = time.strftime('%I:%M:%S %p | %B %d, %Y')
@@ -118,11 +139,9 @@ class TenantTrackerApp(ctk.CTk):
         self.after(1000, self.update_clock)
 
     def save_tenant_to_db(self):
-        # Extract data from the form
         data = [self.entries[field].get() for field in self.entries]
         data.extend([self.check_vars[check].get() for check in self.check_vars])
 
-        # Connect and insert into database
         conn = sqlite3.connect('tenant_tracker.db')
         cursor = conn.cursor()
         cursor.execute('''
@@ -135,31 +154,29 @@ class TenantTrackerApp(ctk.CTk):
         conn.commit()
         conn.close()
 
-        # Clear the form fields after saving
-        for ent in self.entries.values():
-            ent.delete(0, 'end')
+        # Clear form fields
+        for field, ent in self.entries.items():
+            if field in ["Date Started", "Move Out Date"]:
+                ent.set_date(time.strftime('%Y-%m-%d')) # Reset to today's date
+            else:
+                ent.delete(0, 'end')
+        
         for var in self.check_vars.values():
             var.set(0)
             
-        # Refresh the table immediately to show the new tenant
         self.load_tenants_from_db()
 
     def load_tenants_from_db(self):
-        # Clear existing rows in the table
         for item in self.tenant_table.get_children():
             self.tenant_table.delete(item)
             
         conn = sqlite3.connect('tenant_tracker.db')
         cursor = conn.cursor()
-        
-        # Fetch key columns for the summary table
         cursor.execute("SELECT id, full_name, room_number, date_started, monthly_due, contact_number FROM tenants")
         rows = cursor.fetchall()
         
-        # Insert rows into the Treeview
         for row in rows:
             self.tenant_table.insert("", "end", values=row)
-            
         conn.close()
 
 if __name__ == "__main__":
