@@ -3,7 +3,7 @@ import tkinter.ttk as ttk
 import time
 import sqlite3
 from database import init_db
-from tkcalendar import DateEntry  # Enables the pop-out calendar
+from tkcalendar import DateEntry 
 
 # Initialize database on launch
 init_db()
