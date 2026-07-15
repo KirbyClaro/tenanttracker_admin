@@ -1,6 +1,6 @@
 import customtkinter as ctk
 import tkinter.ttk as ttk
-import tkinter as tk  # Imported for the right-click menu
+import tkinter as tk
 import time
 import sqlite3
 from database import init_db
@@ -183,7 +183,6 @@ class TenantTrackerApp(ctk.CTk):
         self.context_menu = tk.Menu(self, tearoff=0, bg="#343638", fg="white", activebackground="#1f538d")
         self.context_menu.add_command(label="Copy Cell Value", command=self.copy_cell)
         
-        # Bind right-click (<Button-3>) to the table
         self.tenant_table.bind("<Button-3>", self.show_context_menu)
 
         # --- ACTION BUTTONS ---
@@ -199,47 +198,42 @@ class TenantTrackerApp(ctk.CTk):
         self.load_tenants_from_db()
 
     def show_context_menu(self, event):
-        # Identify the region clicked
         region = self.tenant_table.identify_region(event.x, event.y)
         if region == "cell":
-            # Identify exact row and column
             self.right_click_row = self.tenant_table.identify_row(event.y)
             self.right_click_col = self.tenant_table.identify_column(event.x)
-            
-            # Select the row automatically so the user knows what they clicked
             self.tenant_table.selection_set(self.right_click_row)
-            
-            # Show the right-click menu
             self.context_menu.tk_popup(event.x_root, event.y_root)
 
     def copy_cell(self):
         if hasattr(self, 'right_click_row') and hasattr(self, 'right_click_col'):
-            # Calculate column index from the column ID (e.g., '#12' -> index 11)
             col_index = int(self.right_click_col.replace('#', '')) - 1
             item_values = self.tenant_table.item(self.right_click_row)['values']
             
             if 0 <= col_index < len(item_values):
                 cell_value = str(item_values[col_index])
-                
-                # Push to system clipboard
                 self.clipboard_clear()
                 self.clipboard_append(cell_value)
                 self.update() 
                 
-                # Visual feedback via window title
                 original_title = "TenantTracker Admin"
                 self.title("TenantTracker Admin - Copied to Clipboard!")
                 self.after(1500, lambda: self.title(original_title))
 
     def reset_table_columns(self):
-        for col in self.columns:
-            self.tenant_table.column(col, width=120, anchor="center") 
-            
-        self.tenant_table.column("ID", width=40)
-        self.tenant_table.column("Name", width=180, anchor="w")
-        self.tenant_table.column("Address", width=200, anchor="w")
-        self.tenant_table.column("Room", width=60)
-        self.tenant_table.column("Notes", width=250, anchor="w")
+        # Mapped out precise proportional widths for every single column
+        column_widths = {
+            "ID": 40, "Status": 80, "Name": 180, "Address": 280, "Room": 60, 
+            "Started": 100, "Term": 80, "Move Out": 100, "Monthly": 90, 
+            "Valid ID": 130, "Job": 140, "Messenger": 180, "Email": 220, 
+            "Contact": 120, "Em. Name": 180, "Em. Contact": 120, "Occupants": 80,
+            "Vehicle": 150, "Notes": 250, "Agreement": 80, "Advance": 80, "Deposit": 80
+        }
+        
+        # Apply the widths and adjust alignment (left-align text, center-align data/numbers)
+        for col, width in column_widths.items():
+            anchor_val = "w" if col in ["Name", "Address", "Messenger", "Email", "Em. Name", "Vehicle", "Notes", "Job", "Valid ID"] else "center"
+            self.tenant_table.column(col, width=width, anchor=anchor_val)
 
     def toggle_form(self):
         if self.form_visible:
