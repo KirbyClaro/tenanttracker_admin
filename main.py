@@ -14,7 +14,7 @@ class TenantTrackerApp(ctk.CTk):
 
         # Window Setup
         self.title("TenantTracker Admin")
-        self.geometry("1200x750") # Made the window slightly wider for the new table columns
+        self.geometry("1200x750")
         
         self.tabview = ctk.CTkTabview(self, width=1150, height=700)
         self.tabview.pack(padx=20, pady=20, fill="both", expand=True)
@@ -60,7 +60,7 @@ class TenantTrackerApp(ctk.CTk):
 
         # Search Box
         self.search_var = ctk.StringVar()
-        self.search_var.trace_add("write", self.trigger_search) # Instantly searches as you type
+        self.search_var.trace_add("write", self.trigger_search)
         self.search_entry = ctk.CTkEntry(
             self.search_frame, 
             placeholder_text="Search by Name or Room...", 
@@ -68,6 +68,17 @@ class TenantTrackerApp(ctk.CTk):
             width=300
         )
         self.search_entry.pack(side="left", padx=(0, 10), pady=10)
+
+        # Reset Columns Button
+        self.reset_cols_btn = ctk.CTkButton(
+            self.search_frame, 
+            text="Reset Columns", 
+            command=self.reset_table_columns, 
+            width=120, 
+            fg_color="#565b5e", 
+            hover_color="#343638"
+        )
+        self.reset_cols_btn.pack(side="right", padx=10, pady=10)
 
         # --- CONTENT LAYOUT ---
         self.tenant_content = ctk.CTkFrame(self.tab_tenants, fg_color="transparent")
@@ -84,7 +95,6 @@ class TenantTrackerApp(ctk.CTk):
 
         self.entries = {}
         
-        # New Field Array
         self.fields = [
             "Status", "Full Name", "Address", "Room Number", "Date Started",
             "Lease Term", "Move Out Date", "Monthly Due", "Valid ID", "Working/Job",
@@ -117,7 +127,6 @@ class TenantTrackerApp(ctk.CTk):
                 ent.pack(padx=10, pady=(0, 5))
                 self.entries[field] = ent
 
-        # Remarks / Notes Box (Special handling since it's multiline)
         lbl_notes = ctk.CTkLabel(self.form_frame, text="Remarks / Notes")
         lbl_notes.pack(anchor="w", padx=10, pady=(5, 0))
         self.notes_box = ctk.CTkTextbox(self.form_frame, width=300, height=80)
@@ -147,7 +156,6 @@ class TenantTrackerApp(ctk.CTk):
         style.configure("Treeview.Heading", background="#565b5e", foreground="white", font=('Segoe UI', 12, 'bold'), relief="flat")
         style.map("Treeview.Heading", background=[('active', '#343638')])
 
-        # Expanded Columns Array
         self.columns = (
             "ID", "Status", "Name", "Address", "Room", "Started", "Term", 
             "Move Out", "Monthly", "Valid ID", "Job", "Messenger", 
@@ -166,15 +174,8 @@ class TenantTrackerApp(ctk.CTk):
         
         for col in self.columns:
             self.tenant_table.heading(col, text=col)
-            self.tenant_table.column(col, width=120, anchor="center") # Default width
             
-        # Specific Adjustments
-        self.tenant_table.column("ID", width=40)
-        self.tenant_table.column("Name", width=180, anchor="w")
-        self.tenant_table.column("Address", width=200, anchor="w")
-        self.tenant_table.column("Room", width=60)
-        self.tenant_table.column("Notes", width=250, anchor="w")
-        
+        self.reset_table_columns() # Apply default widths on launch
         self.tenant_table.pack(fill="both", expand=True, padx=(10, 0), pady=(10, 0))
 
         # --- ACTION BUTTONS ---
@@ -188,6 +189,17 @@ class TenantTrackerApp(ctk.CTk):
         self.delete_btn.pack(side="left")
 
         self.load_tenants_from_db()
+
+    def reset_table_columns(self):
+        # Snaps all columns back to their original readable sizes
+        for col in self.columns:
+            self.tenant_table.column(col, width=120, anchor="center") 
+            
+        self.tenant_table.column("ID", width=40)
+        self.tenant_table.column("Name", width=180, anchor="w")
+        self.tenant_table.column("Address", width=200, anchor="w")
+        self.tenant_table.column("Room", width=60)
+        self.tenant_table.column("Notes", width=250, anchor="w")
 
     def toggle_form(self):
         if self.form_visible:
@@ -231,7 +243,6 @@ class TenantTrackerApp(ctk.CTk):
         self.editing_tenant_id = item_values[0]
         self.save_btn.configure(text="Update Tenant", fg_color="#B8860B", hover_color="#8B6508")
         
-        # Mapping item_values indices (1 to 17) directly to our self.fields list
         for idx, field in enumerate(self.fields):
             val = str(item_values[idx + 1]) if item_values[idx + 1] != "None" else ""
             if field in ["Date Started", "Move Out Date"]:
@@ -242,11 +253,9 @@ class TenantTrackerApp(ctk.CTk):
                 self.entries[field].delete(0, 'end')
                 self.entries[field].insert(0, val)
 
-        # Notes Box (Index 18)
         self.notes_box.delete("1.0", "end")
         self.notes_box.insert("1.0", str(item_values[18]) if item_values[18] != "None" else "")
 
-        # Checkboxes (Indices 19, 20, 21)
         self.check_vars["Agreement Signed"].set(1 if item_values[19] == "Yes" else 0)
         self.check_vars["Advance Paid"].set(1 if item_values[20] == "Yes" else 0)
         self.check_vars["Deposit Paid"].set(1 if item_values[21] == "Yes" else 0)
@@ -282,10 +291,7 @@ class TenantTrackerApp(ctk.CTk):
 
     def save_tenant_to_db(self):
         data = [self.entries[field].get() for field in self.fields]
-        
-        # Grab Notes text box (stripping the trailing newline tkinter adds)
         data.append(self.notes_box.get("1.0", "end-1c")) 
-        
         data.extend([self.check_vars[check].get() for check in self.check_vars])
 
         conn = sqlite3.connect('tenant_tracker.db')
@@ -325,7 +331,6 @@ class TenantTrackerApp(ctk.CTk):
         conn = sqlite3.connect('tenant_tracker.db')
         cursor = conn.cursor()
         
-        # Apply Filters and Search
         status_filter = self.filter_var.get()
         search_text = self.search_var.get()
         
