@@ -49,6 +49,9 @@ class TenantTrackerApp(ctk.CTk):
         self.setup_financials_tab() 
         self.setup_summary_tab()
         self.setup_settings_tab()
+        
+        # Apply table themes immediately on boot
+        self.apply_table_theme()
 
     def load_settings(self):
         conn = sqlite3.connect('tenant_tracker.db')
@@ -62,6 +65,32 @@ class TenantTrackerApp(ctk.CTk):
         ctk.set_appearance_mode(theme)
         ctk.set_default_color_theme("blue")
         return settings
+
+    def apply_table_theme(self):
+        """Dynamically updates standard ttk widgets based on the current theme"""
+        mode = ctk.get_appearance_mode()
+        style = ttk.Style()
+        style.theme_use("default")
+        
+        if mode == "Light":
+            bg_color = "#ffffff"
+            fg_color = "#000000"
+            head_bg = "#e0e0e0"
+            head_fg = "#000000"
+            head_active = "#d3d3d3"
+            border = "#cccccc"
+        else:
+            bg_color = "#2b2b2b"
+            fg_color = "white"
+            head_bg = "#565b5e"
+            head_fg = "white"
+            head_active = "#343638"
+            border = "#343638"
+
+        style.configure("Treeview", background=bg_color, foreground=fg_color, rowheight=40, font=('Segoe UI', 11), fieldbackground=bg_color, bordercolor=border, borderwidth=0)
+        style.map('Treeview', background=[('selected', '#1f538d')], foreground=[('selected', 'white')])
+        style.configure("Treeview.Heading", background=head_bg, foreground=head_fg, font=('Segoe UI', 12, 'bold'), relief="flat")
+        style.map("Treeview.Heading", background=[('active', head_active)])
 
     # ==========================================
     # TAB 1: TENANT MANAGEMENT
@@ -80,7 +109,8 @@ class TenantTrackerApp(ctk.CTk):
         self.clock_label.pack(side="right")
         self.update_clock()
 
-        self.search_frame = ctk.CTkFrame(self.tab_tenants, fg_color="#2b2b2b")
+        # FIXED: Removed hardcoded dark color, now supports Light/Dark mode switching
+        self.search_frame = ctk.CTkFrame(self.tab_tenants, fg_color=("#e5e5e5", "#2b2b2b"))
         self.search_frame.pack(fill="x", padx=10, pady=(0, 10))
 
         self.filter_var = ctk.StringVar(value="Active")
@@ -98,9 +128,10 @@ class TenantTrackerApp(ctk.CTk):
         )
         self.search_entry.pack(side="left", padx=(0, 10), pady=10)
 
+        # FIXED: Color tuples
         self.reset_cols_btn = ctk.CTkButton(
             self.search_frame, text="Reset Columns", command=self.reset_table_columns, 
-            width=120, fg_color="#565b5e", hover_color="#343638"
+            width=120, fg_color=("#d3d3d3", "#565b5e"), hover_color=("#c8c8c8", "#343638"), text_color=("black", "white")
         )
         self.reset_cols_btn.pack(side="right", padx=10, pady=10)
 
@@ -175,18 +206,11 @@ class TenantTrackerApp(ctk.CTk):
             chk = ctk.CTkCheckBox(self.form_frame, text=check_name, variable=var)
             chk.pack(anchor="w", padx=10, pady=5)
 
-        self.save_btn = ctk.CTkButton(self.form_frame, text="Save Tenant", command=self.save_tenant_to_db, fg_color="green", hover_color="darkgreen")
+        self.save_btn = ctk.CTkButton(self.form_frame, text="Save Tenant", command=self.save_tenant_to_db, fg_color="green", hover_color="darkgreen", text_color="white")
         self.save_btn.pack(pady=20, padx=10, fill="x")
 
         self.table_frame = ctk.CTkFrame(self.tenant_content)
         self.table_frame.pack(side="right", fill="both", expand=True)
-        
-        style = ttk.Style()
-        style.theme_use("default")
-        style.configure("Treeview", background="#2b2b2b", foreground="white", rowheight=40, font=('Segoe UI', 11), fieldbackground="#2b2b2b", bordercolor="#343638", borderwidth=0)
-        style.map('Treeview', background=[('selected', '#1f538d')])
-        style.configure("Treeview.Heading", background="#565b5e", foreground="white", font=('Segoe UI', 12, 'bold'), relief="flat")
-        style.map("Treeview.Heading", background=[('active', '#343638')])
 
         self.columns = (
             "ID", "Status", "Name", "Address", "Room", "Started", "Term", 
@@ -205,21 +229,22 @@ class TenantTrackerApp(ctk.CTk):
         self.reset_table_columns()
         self.tenant_table.pack(fill="both", expand=True, padx=(10, 0), pady=(10, 0))
 
-        self.context_menu = tk.Menu(self, tearoff=0, bg="#343638", fg="white", activebackground="#1f538d")
+        self.context_menu = tk.Menu(self, tearoff=0)
         self.context_menu.add_command(label="Copy Cell Value", command=self.copy_cell)
         self.tenant_table.bind("<Button-3>", self.show_context_menu)
 
         self.action_frame = ctk.CTkFrame(self.table_frame, fg_color="transparent")
         self.action_frame.pack(fill="x", padx=10, pady=(10, 0))
 
-        self.view_btn = ctk.CTkButton(self.action_frame, text="View Selected", command=self.view_tenant_details, fg_color="#1f538d", hover_color="#14375e")
+        self.view_btn = ctk.CTkButton(self.action_frame, text="View Selected", command=self.view_tenant_details, fg_color="#1f538d", hover_color="#14375e", text_color="white")
         self.view_btn.pack(side="left", padx=(0, 10))
-        self.edit_btn = ctk.CTkButton(self.action_frame, text="Edit Selected", command=self.load_for_editing, fg_color="#B8860B", hover_color="#8B6508")
+        self.edit_btn = ctk.CTkButton(self.action_frame, text="Edit Selected", command=self.load_for_editing, fg_color="#B8860B", hover_color="#8B6508", text_color="white")
         self.edit_btn.pack(side="left", padx=(0, 10))
-        self.delete_btn = ctk.CTkButton(self.action_frame, text="Delete Selected", command=self.delete_tenant, fg_color="#8B0000", hover_color="#660000")
+        self.delete_btn = ctk.CTkButton(self.action_frame, text="Delete Selected", command=self.delete_tenant, fg_color="#8B0000", hover_color="#660000", text_color="white")
         self.delete_btn.pack(side="left", padx=(0, 10))
         
-        self.export_tenants_btn = ctk.CTkButton(self.action_frame, text="Export to CSV", command=lambda: self.export_to_csv('tenants'), fg_color="#2b2b2b", hover_color="#565b5e", border_color="#1f538d", border_width=2)
+        # FIXED: Color tuples
+        self.export_tenants_btn = ctk.CTkButton(self.action_frame, text="Export to CSV", command=lambda: self.export_to_csv('tenants'), fg_color=("#d3d3d3", "#2b2b2b"), hover_color=("#c8c8c8", "#565b5e"), text_color=("black", "white"), border_color="#1f538d", border_width=2)
         self.export_tenants_btn.pack(side="right")
 
         self.load_tenants_from_db()
@@ -276,7 +301,7 @@ class TenantTrackerApp(ctk.CTk):
         self.fin_status_combo.pack(padx=10, pady=(0, 15))
         self.fin_entries["Status"] = self.fin_status_combo
 
-        self.fin_save_btn = ctk.CTkButton(self.fin_form_frame, text="Save Transaction", command=self.save_fin_to_db, fg_color="green", hover_color="darkgreen")
+        self.fin_save_btn = ctk.CTkButton(self.fin_form_frame, text="Save Transaction", command=self.save_fin_to_db, fg_color="green", hover_color="darkgreen", text_color="white")
         self.fin_save_btn.pack(pady=10, padx=10, fill="x")
 
         self.fin_table_frame = ctk.CTkFrame(self.fin_content)
@@ -304,14 +329,14 @@ class TenantTrackerApp(ctk.CTk):
         self.fin_action_frame = ctk.CTkFrame(self.fin_table_frame, fg_color="transparent")
         self.fin_action_frame.pack(fill="x", padx=10, pady=(10, 0))
 
-        self.mark_paid_btn = ctk.CTkButton(self.fin_action_frame, text="Mark as Paid", command=self.mark_fin_paid, fg_color="green", hover_color="darkgreen")
+        self.mark_paid_btn = ctk.CTkButton(self.fin_action_frame, text="Mark as Paid", command=self.mark_fin_paid, fg_color="green", hover_color="darkgreen", text_color="white")
         self.mark_paid_btn.pack(side="left", padx=(0, 10))
-        self.edit_fin_btn = ctk.CTkButton(self.fin_action_frame, text="Edit Selected", command=self.load_fin_for_editing, fg_color="#B8860B", hover_color="#8B6508")
+        self.edit_fin_btn = ctk.CTkButton(self.fin_action_frame, text="Edit Selected", command=self.load_fin_for_editing, fg_color="#B8860B", hover_color="#8B6508", text_color="white")
         self.edit_fin_btn.pack(side="left", padx=(0, 10))
-        self.delete_fin_btn = ctk.CTkButton(self.fin_action_frame, text="Delete Selected", command=self.delete_fin, fg_color="#8B0000", hover_color="#660000")
+        self.delete_fin_btn = ctk.CTkButton(self.fin_action_frame, text="Delete Selected", command=self.delete_fin, fg_color="#8B0000", hover_color="#660000", text_color="white")
         self.delete_fin_btn.pack(side="left", padx=(0, 10))
 
-        self.export_fin_btn = ctk.CTkButton(self.fin_action_frame, text="Export to CSV", command=lambda: self.export_to_csv('financials'), fg_color="#2b2b2b", hover_color="#565b5e", border_color="#1f538d", border_width=2)
+        self.export_fin_btn = ctk.CTkButton(self.fin_action_frame, text="Export to CSV", command=lambda: self.export_to_csv('financials'), fg_color=("#d3d3d3", "#2b2b2b"), hover_color=("#c8c8c8", "#565b5e"), text_color=("black", "white"), border_color="#1f538d", border_width=2)
         self.export_fin_btn.pack(side="right")
 
         self.load_fin_from_db()
@@ -335,19 +360,19 @@ class TenantTrackerApp(ctk.CTk):
         self.cards_frame = ctk.CTkFrame(self.dash_frame, fg_color="transparent")
         self.cards_frame.pack(fill="x")
 
-        self.lbl_inc = ctk.CTkLabel(self.cards_frame, text="Monthly Income (Paid)\n₱ 0.00", font=("Segoe UI", 16, "bold"), fg_color="#1f538d", corner_radius=8, width=250, height=80)
+        self.lbl_inc = ctk.CTkLabel(self.cards_frame, text="Monthly Income (Paid)\n₱ 0.00", font=("Segoe UI", 16, "bold"), fg_color="#1f538d", text_color="white", corner_radius=8, width=250, height=80)
         self.lbl_inc.pack(side="left", padx=10, expand=True)
 
-        self.lbl_exp = ctk.CTkLabel(self.cards_frame, text="Monthly Expenses (Paid)\n₱ 0.00", font=("Segoe UI", 16, "bold"), fg_color="#8B0000", corner_radius=8, width=250, height=80)
+        self.lbl_exp = ctk.CTkLabel(self.cards_frame, text="Monthly Expenses (Paid)\n₱ 0.00", font=("Segoe UI", 16, "bold"), fg_color="#8B0000", text_color="white", corner_radius=8, width=250, height=80)
         self.lbl_exp.pack(side="left", padx=10, expand=True)
 
-        self.lbl_save_mo = ctk.CTkLabel(self.cards_frame, text="Monthly Savings\n₱ 0.00", font=("Segoe UI", 18, "bold"), fg_color="#006400", corner_radius=8, width=250, height=80)
+        self.lbl_save_mo = ctk.CTkLabel(self.cards_frame, text="Monthly Savings\n₱ 0.00", font=("Segoe UI", 18, "bold"), fg_color="#006400", text_color="white", corner_radius=8, width=250, height=80)
         self.lbl_save_mo.pack(side="left", padx=10, expand=True)
 
-        self.lbl_save_tot = ctk.CTkLabel(self.cards_frame, text="Total Savings (All-Time)\n₱ 0.00", font=("Segoe UI", 18, "bold"), fg_color="#B8860B", corner_radius=8, width=250, height=80)
+        self.lbl_save_tot = ctk.CTkLabel(self.cards_frame, text="Total Savings (All-Time)\n₱ 0.00", font=("Segoe UI", 18, "bold"), fg_color="#B8860B", text_color="white", corner_radius=8, width=250, height=80)
         self.lbl_save_tot.pack(side="left", padx=10, expand=True)
 
-        ctk.CTkFrame(self.tab_summary, height=2, fg_color="#565b5e").pack(fill="x", padx=10, pady=10)
+        ctk.CTkFrame(self.tab_summary, height=2, fg_color=("#d3d3d3", "#565b5e")).pack(fill="x", padx=10, pady=10)
 
         self.sum_content = ctk.CTkFrame(self.tab_summary, fg_color="transparent")
         self.sum_content.pack(fill="both", expand=True, padx=10, pady=(0, 10))
@@ -378,10 +403,10 @@ class TenantTrackerApp(ctk.CTk):
         ctk.CTkLabel(self.exp_form_frame, text="Payment Status").pack(anchor="w", padx=10)
         self.exp_status_combo.pack(padx=10, pady=(0, 20))
 
-        self.exp_save_btn = ctk.CTkButton(self.exp_form_frame, text="Save Expense", command=self.save_expense_to_db, fg_color="green", hover_color="darkgreen")
+        self.exp_save_btn = ctk.CTkButton(self.exp_form_frame, text="Save Expense", command=self.save_expense_to_db, fg_color="green", hover_color="darkgreen", text_color="white")
         self.exp_save_btn.pack(pady=10, padx=10, fill="x")
         
-        self.exp_clear_btn = ctk.CTkButton(self.exp_form_frame, text="Clear Form", command=self.clear_exp_form, fg_color="#565b5e", hover_color="#343638")
+        self.exp_clear_btn = ctk.CTkButton(self.exp_form_frame, text="Clear Form", command=self.clear_exp_form, fg_color=("#d3d3d3", "#565b5e"), hover_color=("#c8c8c8", "#343638"), text_color=("black", "white"))
         self.exp_clear_btn.pack(pady=5, padx=10, fill="x")
 
         self.exp_table_frame = ctk.CTkFrame(self.sum_content)
@@ -406,20 +431,20 @@ class TenantTrackerApp(ctk.CTk):
         self.exp_action_frame = ctk.CTkFrame(self.exp_table_frame, fg_color="transparent")
         self.exp_action_frame.pack(fill="x", padx=10, pady=(10, 0))
 
-        self.exp_paid_btn = ctk.CTkButton(self.exp_action_frame, text="Mark as Paid", command=self.mark_expense_paid, fg_color="green", hover_color="darkgreen")
+        self.exp_paid_btn = ctk.CTkButton(self.exp_action_frame, text="Mark as Paid", command=self.mark_expense_paid, fg_color="green", hover_color="darkgreen", text_color="white")
         self.exp_paid_btn.pack(side="left", padx=(0, 10))
-        self.exp_edit_btn = ctk.CTkButton(self.exp_action_frame, text="Edit Selected", command=self.load_expense_for_editing, fg_color="#B8860B", hover_color="#8B6508")
+        self.exp_edit_btn = ctk.CTkButton(self.exp_action_frame, text="Edit Selected", command=self.load_expense_for_editing, fg_color="#B8860B", hover_color="#8B6508", text_color="white")
         self.exp_edit_btn.pack(side="left", padx=(0, 10))
-        self.exp_delete_btn = ctk.CTkButton(self.exp_action_frame, text="Delete Selected", command=self.delete_expense, fg_color="#8B0000", hover_color="#660000")
+        self.exp_delete_btn = ctk.CTkButton(self.exp_action_frame, text="Delete Selected", command=self.delete_expense, fg_color="#8B0000", hover_color="#660000", text_color="white")
         self.exp_delete_btn.pack(side="left", padx=(0, 10))
 
-        self.export_exp_btn = ctk.CTkButton(self.exp_action_frame, text="Export to CSV", command=lambda: self.export_to_csv('expenses'), fg_color="#2b2b2b", hover_color="#565b5e", border_color="#1f538d", border_width=2)
+        self.export_exp_btn = ctk.CTkButton(self.exp_action_frame, text="Export to CSV", command=lambda: self.export_to_csv('expenses'), fg_color=("#d3d3d3", "#2b2b2b"), hover_color=("#c8c8c8", "#565b5e"), text_color=("black", "white"), border_color="#1f538d", border_width=2)
         self.export_exp_btn.pack(side="right")
 
         self.refresh_summary_dashboard()
 
     # ==========================================
-    # TAB 4: SETTINGS & BACKUPS (NEW)
+    # TAB 4: SETTINGS & BACKUPS
     # ==========================================
     def setup_settings_tab(self):
         self.set_header = ctk.CTkFrame(self.tab_settings, fg_color="transparent")
@@ -430,7 +455,6 @@ class TenantTrackerApp(ctk.CTk):
         self.set_content = ctk.CTkFrame(self.tab_settings, fg_color="transparent")
         self.set_content.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # Left Column: Preferences & Appearance
         self.left_settings = ctk.CTkFrame(self.set_content, width=400)
         self.left_settings.pack(side="left", fill="y", padx=(0, 10), expand=True)
 
@@ -441,7 +465,6 @@ class TenantTrackerApp(ctk.CTk):
         self.theme_menu = ctk.CTkOptionMenu(self.left_settings, values=["System", "Dark", "Light"], variable=self.theme_var, command=self.change_theme)
         self.theme_menu.pack(anchor="w", padx=20, pady=(0, 20))
 
-        # Email Automations Configuration
         ctk.CTkLabel(self.left_settings, text="Email Automations (For Reminders)", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(15, 15), anchor="w", padx=20)
         
         ctk.CTkLabel(self.left_settings, text="Sender Email Address").pack(anchor="w", padx=20)
@@ -454,10 +477,9 @@ class TenantTrackerApp(ctk.CTk):
         self.pass_entry.insert(0, self.app_settings.get("sender_password", ""))
         self.pass_entry.pack(anchor="w", padx=20, pady=(0, 20))
 
-        self.save_settings_btn = ctk.CTkButton(self.left_settings, text="Save Email Settings", command=self.save_app_settings, fg_color="green", hover_color="darkgreen")
+        self.save_settings_btn = ctk.CTkButton(self.left_settings, text="Save Email Settings", command=self.save_app_settings, fg_color="green", hover_color="darkgreen", text_color="white")
         self.save_settings_btn.pack(anchor="w", padx=20, pady=10)
 
-        # Right Column: Data Security
         self.right_settings = ctk.CTkFrame(self.set_content, width=400)
         self.right_settings.pack(side="right", fill="both", expand=True)
 
@@ -466,16 +488,22 @@ class TenantTrackerApp(ctk.CTk):
         backup_desc = ctk.CTkLabel(self.right_settings, text="Create a secure, portable ZIP file containing your database and all uploaded ID pictures. Keep this safe!", wraplength=350, justify="left")
         backup_desc.pack(anchor="w", padx=20, pady=(0, 10))
 
-        self.backup_btn = ctk.CTkButton(self.right_settings, text="💾 Create Full System Backup", command=self.create_backup, fg_color="#B8860B", hover_color="#8B6508", font=ctk.CTkFont(weight="bold"))
+        self.backup_btn = ctk.CTkButton(self.right_settings, text="💾 Create Full System Backup", command=self.create_backup, fg_color="#B8860B", hover_color="#8B6508", text_color="white", font=ctk.CTkFont(weight="bold"))
         self.backup_btn.pack(anchor="w", padx=20, pady=10)
 
     # --- Settings Functions ---
     def change_theme(self, new_theme):
+        # Update CustomTkinter widgets
         ctk.set_appearance_mode(new_theme)
+        
+        # Save to database
         conn = sqlite3.connect('tenant_tracker.db')
         conn.cursor().execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('theme', ?)", (new_theme,))
         conn.commit()
         conn.close()
+        
+        # Manually update standard tkinter Treeview styles
+        self.apply_table_theme()
 
     def save_app_settings(self):
         email = self.email_entry.get()
@@ -499,17 +527,10 @@ class TenantTrackerApp(ctk.CTk):
 
         try:
             with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as backup_zip:
-                # Add database file
-                if os.path.exists('tenant_tracker.db'):
-                    backup_zip.write('tenant_tracker.db')
-                
-                # Add all uploaded pictures
+                if os.path.exists('tenant_tracker.db'): backup_zip.write('tenant_tracker.db')
                 if os.path.exists('uploads'):
                     for root, dirs, files in os.walk('uploads'):
-                        for file in files:
-                            file_path = os.path.join(root, file)
-                            backup_zip.write(file_path)
-            
+                        for file in files: backup_zip.write(os.path.join(root, file))
             messagebox.showinfo("Backup Successful!", f"System completely backed up to:\n\n{zip_path}")
         except Exception as e:
             messagebox.showerror("Backup Failed", f"An error occurred: {str(e)}")
@@ -523,8 +544,7 @@ class TenantTrackerApp(ctk.CTk):
         conn.close()
 
         file_path = filedialog.asksaveasfilename(
-            defaultextension=".csv",
-            filetypes=[("CSV Spreadsheet", "*.csv")],
+            defaultextension=".csv", filetypes=[("CSV Spreadsheet", "*.csv")],
             title=f"Export {table_name.title()}",
             initialfile=f"{table_name}_export_{datetime.now().strftime('%Y%m%d')}.csv"
         )
@@ -810,7 +830,7 @@ class TenantTrackerApp(ctk.CTk):
                 row.pack(fill="x", pady=4, padx=5)
                 ctk.CTkLabel(row, text=f"{col}:", font=ctk.CTkFont(weight="bold"), width=120, anchor="w").pack(side="left")
                 ctk.CTkLabel(row, text=d_val, anchor="w", wraplength=340, justify="left").pack(side="left", fill="x", expand=True)
-        ctk.CTkButton(win, text="Close Window", command=win.destroy, fg_color="#565b5e", hover_color="#343638").pack(pady=(10, 20))
+        ctk.CTkButton(win, text="Close Window", command=win.destroy, fg_color=("#d3d3d3", "#565b5e"), hover_color=("#c8c8c8", "#343638"), text_color=("black", "white")).pack(pady=(10, 20))
 
     def show_context_menu(self, event):
         if self.tenant_table.identify_region(event.x, event.y) == "cell":
