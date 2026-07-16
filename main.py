@@ -1,7 +1,7 @@
 import customtkinter as ctk
 import tkinter.ttk as ttk
 import tkinter as tk
-from tkinter import filedialog
+from tkinter import filedialog, messagebox 
 import time
 import sqlite3
 import os
@@ -40,7 +40,7 @@ class TenantTrackerApp(ctk.CTk):
         self.editing_fin_id = None
 
         self.setup_tenant_tab()
-        self.setup_financials_tab() # Load the new tab
+        self.setup_financials_tab() 
 
     # ==========================================
     # TAB 1: TENANT MANAGEMENT
@@ -201,7 +201,7 @@ class TenantTrackerApp(ctk.CTk):
         self.load_tenants_from_db()
 
     # ==========================================
-    # TAB 2: FINANCIALS (NEW)
+    # TAB 2: FINANCIALS 
     # ==========================================
     def setup_financials_tab(self):
         self.fin_header = ctk.CTkFrame(self.tab_financials, fg_color="transparent")
@@ -216,7 +216,6 @@ class TenantTrackerApp(ctk.CTk):
         self.fin_content = ctk.CTkFrame(self.tab_financials, fg_color="transparent")
         self.fin_content.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
-        # Left: Financial Input Form
         self.fin_form_frame = ctk.CTkFrame(self.fin_content, width=350)
 
         self.fin_entries = {}
@@ -256,7 +255,6 @@ class TenantTrackerApp(ctk.CTk):
         self.fin_save_btn = ctk.CTkButton(self.fin_form_frame, text="Save Transaction", command=self.save_fin_to_db, fg_color="green", hover_color="darkgreen")
         self.fin_save_btn.pack(pady=10, padx=10, fill="x")
 
-        # Right: Financial Table
         self.fin_table_frame = ctk.CTkFrame(self.fin_content)
         self.fin_table_frame.pack(side="right", fill="both", expand=True)
 
@@ -278,16 +276,13 @@ class TenantTrackerApp(ctk.CTk):
         
         self.fin_table.pack(fill="both", expand=True, padx=(10, 0), pady=(10, 0))
 
-        # Financial Actions
         self.fin_action_frame = ctk.CTkFrame(self.fin_table_frame, fg_color="transparent")
         self.fin_action_frame.pack(fill="x", padx=10, pady=(10, 0))
 
         self.mark_paid_btn = ctk.CTkButton(self.fin_action_frame, text="Mark as Paid", command=self.mark_fin_paid, fg_color="green", hover_color="darkgreen")
         self.mark_paid_btn.pack(side="left", padx=(0, 10))
-
         self.edit_fin_btn = ctk.CTkButton(self.fin_action_frame, text="Edit Selected", command=self.load_fin_for_editing, fg_color="#B8860B", hover_color="#8B6508")
         self.edit_fin_btn.pack(side="left", padx=(0, 10))
-
         self.delete_fin_btn = ctk.CTkButton(self.fin_action_frame, text="Delete Selected", command=self.delete_fin, fg_color="#8B0000", hover_color="#660000")
         self.delete_fin_btn.pack(side="left")
 
@@ -309,7 +304,7 @@ class TenantTrackerApp(ctk.CTk):
             self.fin_form_visible = False
             if self.editing_fin_id: self.clear_fin_form()
         else:
-            self.fin_tenant_combo.configure(values=self.get_active_tenant_names()) # Refresh list
+            self.fin_tenant_combo.configure(values=self.get_active_tenant_names())
             self.fin_form_frame.pack(side="left", fill="y", padx=(0, 10), before=self.fin_table_frame)
             self.fin_toggle_btn.configure(text="- Close Form", fg_color="#8B0000", hover_color="#660000")
             self.fin_form_visible = True
@@ -380,12 +375,16 @@ class TenantTrackerApp(ctk.CTk):
     def delete_fin(self):
         selected = self.fin_table.selection()
         if not selected: return
-        f_id = self.fin_table.item(selected[0])['values'][0]
-        conn = sqlite3.connect('tenant_tracker.db')
-        conn.cursor().execute("DELETE FROM financials WHERE id=?", (f_id,))
-        conn.commit()
-        conn.close()
-        self.load_fin_from_db()
+        
+        # Confirmation Pop-up for Financials
+        confirm = messagebox.askyesno("Confirm Deletion", "Are you sure you want to delete this transaction?")
+        if confirm:
+            f_id = self.fin_table.item(selected[0])['values'][0]
+            conn = sqlite3.connect('tenant_tracker.db')
+            conn.cursor().execute("DELETE FROM financials WHERE id=?", (f_id,))
+            conn.commit()
+            conn.close()
+            self.load_fin_from_db()
 
     def mark_fin_paid(self):
         selected = self.fin_table.selection()
@@ -535,11 +534,15 @@ class TenantTrackerApp(ctk.CTk):
     def delete_tenant(self):
         selected = self.tenant_table.selection()
         if not selected: return
-        conn = sqlite3.connect('tenant_tracker.db')
-        conn.cursor().execute("DELETE FROM tenants WHERE id = ?", (self.tenant_table.item(selected[0])['values'][0],))
-        conn.commit()
-        conn.close()
-        self.load_tenants_from_db()
+        
+        # Confirmation Pop-up for Tenants
+        confirm = messagebox.askyesno("Confirm Deletion", "Are you sure you want to delete this tenant?\n\nThis action cannot be undone.")
+        if confirm:
+            conn = sqlite3.connect('tenant_tracker.db')
+            conn.cursor().execute("DELETE FROM tenants WHERE id = ?", (self.tenant_table.item(selected[0])['values'][0],))
+            conn.commit()
+            conn.close()
+            self.load_tenants_from_db()
 
     def clear_form(self):
         for f, e in self.entries.items():
