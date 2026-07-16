@@ -1,13 +1,20 @@
 import customtkinter as ctk
 import tkinter.ttk as ttk
 import tkinter as tk
+from tkinter import filedialog
 import time
 import sqlite3
+import os
+import shutil
+from PIL import Image
 from database import init_db
 from tkcalendar import DateEntry
 
 # Initialize database on launch
 init_db()
+
+# Ensure the uploads directory exists
+os.makedirs("uploads", exist_ok=True)
 
 class TenantTrackerApp(ctk.CTk):
     def __init__(self):
@@ -117,6 +124,18 @@ class TenantTrackerApp(ctk.CTk):
                 ent = ctk.CTkEntry(self.form_frame, width=300, textvariable=self.due_day_var, placeholder_text="e.g., 5 or 15")
                 ent.pack(padx=10, pady=(0, 5))
                 self.entries[field] = ent
+            elif field == "Valid ID":
+                # Special frame with Upload Button for Valid ID
+                id_frame = ctk.CTkFrame(self.form_frame, fg_color="transparent")
+                id_frame.pack(padx=10, pady=(0, 5), fill="x")
+                
+                # Make the text box readonly so user can't mess up the file path
+                ent = ctk.CTkEntry(id_frame, width=210, state="readonly", placeholder_text="No file selected")
+                ent.pack(side="left")
+                
+                upload_btn = ctk.CTkButton(id_frame, text="Upload", width=80, command=self.upload_id_image)
+                upload_btn.pack(side="right")
+                self.entries[field] = ent
             else:
                 ent = ctk.CTkEntry(self.form_frame, width=300)
                 ent.pack(padx=10, pady=(0, 5))
@@ -182,7 +201,6 @@ class TenantTrackerApp(ctk.CTk):
         self.action_frame = ctk.CTkFrame(self.table_frame, fg_color="transparent")
         self.action_frame.pack(fill="x", padx=10, pady=(10, 0))
 
-        # New View Button
         self.view_btn = ctk.CTkButton(self.action_frame, text="View Selected", command=self.view_tenant_details, fg_color="#1f538d", hover_color="#14375e")
         self.view_btn.pack(side="left", padx=(0, 10))
 
@@ -194,55 +212,88 @@ class TenantTrackerApp(ctk.CTk):
 
         self.load_tenants_from_db()
 
+    def upload_id_image(self):
+        # Open file explorer for user to pick an image
+        file_path = filedialog.askopenfilename(
+            title="Select ID Image",
+            filetypes=[("Image Files", "*.png;*.jpg;*.jpeg")]
+        )
+        
+        if file_path:
+            # Create a unique filename using timestamp to avoid overwriting IDs with the same name
+            filename = f"{int(time.time())}_{os.path.basename(file_path)}"
+            destination = os.path.join("uploads", filename)
+            
+            # Copy the file into the uploads folder
+            shutil.copy(file_path, destination)
+            
+            # Put the file path into the entry box
+            ent = self.entries["Valid ID"]
+            ent.configure(state="normal")
+            ent.delete(0, 'end')
+            ent.insert(0, destination)
+            ent.configure(state="readonly")
+
     def view_tenant_details(self):
         selected_item = self.tenant_table.selection()
         if not selected_item: 
-            return # Do nothing if no row is selected
+            return 
             
         item_values = self.tenant_table.item(selected_item[0])['values']
         tenant_name = str(item_values[2])
         
-        # Create the pop-up window
         view_win = ctk.CTkToplevel(self)
         view_win.title(f"Tenant Card: {tenant_name}")
-        view_win.geometry("500x700")
-        view_win.attributes("-topmost", True) # Keep window on top so it doesn't get lost
+        view_win.geometry("550x800")
+        view_win.attributes("-topmost", True) 
         
-        # Header Label
         header = ctk.CTkLabel(view_win, text=f"Data for: {tenant_name}", font=ctk.CTkFont(size=20, weight="bold"))
         header.pack(pady=(20, 10))
         
-        # Scrollable container for the data
-        scroll_frame = ctk.CTkScrollableFrame(view_win, width=450, height=550)
+        scroll_frame = ctk.CTkScrollableFrame(view_win, width=500, height=650)
         scroll_frame.pack(padx=20, pady=10, fill="both", expand=True)
         
-        # Iterate through the columns and display them
         for idx, col_name in enumerate(self.columns):
             val = item_values[idx]
             display_val = str(val) if val != "None" and val != "" else "N/A"
             
             if col_name == "Notes":
-                # Special handling for Notes: Give it a read-only text box
                 lbl_title = ctk.CTkLabel(scroll_frame, text=f"{col_name}:", font=ctk.CTkFont(weight="bold"))
                 lbl_title.pack(anchor="w", pady=(15, 0), padx=5)
                 
-                textbox = ctk.CTkTextbox(scroll_frame, width=420, height=100)
+                textbox = ctk.CTkTextbox(scroll_frame, width=460, height=100)
                 textbox.pack(anchor="w", pady=(0, 10), padx=5)
                 textbox.insert("1.0", display_val)
-                textbox.configure(state="disabled") # Prevents typing
+                textbox.configure(state="disabled") 
+                
+            elif col_name == "Valid ID" and display_val != "N/A" and os.path.exists(display_val):
+                # DISPLAY THE IMAGE
+                lbl_title = ctk.CTkLabel(scroll_frame, text="Valid ID Image:", font=ctk.CTkFont(weight="bold"))
+                lbl_title.pack(anchor="w", pady=(10, 0), padx=5)
+                
+                try:
+                    img = Image.open(display_val)
+                    # Resize the image so it fits nicely in the card
+                    width, height = img.size
+                    ratio = 450 / width
+                    new_size = (450, int(height * ratio))
+                    
+                    ctk_img = ctk.CTkImage(light_image=img, dark_image=img, size=new_size)
+                    img_lbl = ctk.CTkLabel(scroll_frame, image=ctk_img, text="")
+                    img_lbl.pack(anchor="w", pady=(5, 10), padx=5)
+                except Exception:
+                    lbl_val = ctk.CTkLabel(scroll_frame, text="[Image could not be loaded]")
+                    lbl_val.pack(anchor="w", padx=5)
             else:
-                # Standard row design for other details
                 row_frame = ctk.CTkFrame(scroll_frame, fg_color="transparent")
                 row_frame.pack(fill="x", pady=4, padx=5)
                 
                 lbl_title = ctk.CTkLabel(row_frame, text=f"{col_name}:", font=ctk.CTkFont(weight="bold"), width=120, anchor="w")
                 lbl_title.pack(side="left")
                 
-                # wraplength allows long text like addresses to break to a new line
-                lbl_val = ctk.CTkLabel(row_frame, text=display_val, anchor="w", wraplength=280, justify="left")
+                lbl_val = ctk.CTkLabel(row_frame, text=display_val, anchor="w", wraplength=340, justify="left")
                 lbl_val.pack(side="left", fill="x", expand=True)
         
-        # Close Button at the bottom
         close_btn = ctk.CTkButton(view_win, text="Close Window", command=view_win.destroy, fg_color="#565b5e", hover_color="#343638")
         close_btn.pack(pady=(10, 20))
 
@@ -343,6 +394,12 @@ class TenantTrackerApp(ctk.CTk):
                 self.entries[field].set_date(val)
             elif field == "Status":
                 self.entries[field].set(val)
+            elif field == "Valid ID":
+                # Temporarily enable to insert the saved file path
+                self.entries[field].configure(state="normal")
+                self.entries[field].delete(0, 'end')
+                self.entries[field].insert(0, val)
+                self.entries[field].configure(state="readonly")
             else:
                 self.entries[field].delete(0, 'end')
                 self.entries[field].insert(0, val)
@@ -372,6 +429,10 @@ class TenantTrackerApp(ctk.CTk):
                 ent.set_date(time.strftime('%Y-%m-%d'))
             elif field == "Status":
                 ent.set("Active")
+            elif field == "Valid ID":
+                ent.configure(state="normal")
+                ent.delete(0, 'end')
+                ent.configure(state="readonly")
             else:
                 ent.delete(0, 'end')
                 
