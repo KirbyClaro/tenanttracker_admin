@@ -260,7 +260,7 @@ class TenantTrackerApp(ctk.CTk):
         self.fin_table_frame = ctk.CTkFrame(self.fin_content)
         self.fin_table_frame.pack(side="right", fill="both", expand=True)
 
-        self.fin_columns = ("ID", "Tenant Name", "Type", "Amount", "Due Date", "Status")
+        self.fin_columns = ("ID", "Tenant Name", "Type", "Amount", "Due Date", "Status", "Last Edited")
         self.fin_table = ttk.Treeview(self.fin_table_frame, columns=self.fin_columns, show="headings")
         
         self.fin_scroll_y = ctk.CTkScrollbar(self.fin_table_frame, orientation="vertical", command=self.fin_table.yview)
@@ -270,11 +270,12 @@ class TenantTrackerApp(ctk.CTk):
         for col in self.fin_columns: self.fin_table.heading(col, text=col)
         
         self.fin_table.column("ID", width=50, anchor="center")
-        self.fin_table.column("Tenant Name", width=250, anchor="w")
-        self.fin_table.column("Type", width=150, anchor="center")
-        self.fin_table.column("Amount", width=150, anchor="center")
-        self.fin_table.column("Due Date", width=150, anchor="center")
-        self.fin_table.column("Status", width=120, anchor="center")
+        self.fin_table.column("Tenant Name", width=200, anchor="w")
+        self.fin_table.column("Type", width=120, anchor="center")
+        self.fin_table.column("Amount", width=120, anchor="center")
+        self.fin_table.column("Due Date", width=120, anchor="center")
+        self.fin_table.column("Status", width=100, anchor="center")
+        self.fin_table.column("Last Edited", width=160, anchor="center")
         
         self.fin_table.pack(fill="both", expand=True, padx=(10, 0), pady=(10, 0))
 
@@ -312,10 +313,10 @@ class TenantTrackerApp(ctk.CTk):
         self.cards_frame = ctk.CTkFrame(self.dash_frame, fg_color="transparent")
         self.cards_frame.pack(fill="x")
 
-        self.lbl_inc = ctk.CTkLabel(self.cards_frame, text="Monthly Income\n₱ 0.00", font=("Segoe UI", 16, "bold"), fg_color="#1f538d", corner_radius=8, width=250, height=80)
+        self.lbl_inc = ctk.CTkLabel(self.cards_frame, text="Monthly Income (Paid)\n₱ 0.00", font=("Segoe UI", 16, "bold"), fg_color="#1f538d", corner_radius=8, width=250, height=80)
         self.lbl_inc.pack(side="left", padx=10, expand=True)
 
-        self.lbl_exp = ctk.CTkLabel(self.cards_frame, text="Monthly Expenses\n₱ 0.00", font=("Segoe UI", 16, "bold"), fg_color="#8B0000", corner_radius=8, width=250, height=80)
+        self.lbl_exp = ctk.CTkLabel(self.cards_frame, text="Monthly Expenses (Paid)\n₱ 0.00", font=("Segoe UI", 16, "bold"), fg_color="#8B0000", corner_radius=8, width=250, height=80)
         self.lbl_exp.pack(side="left", padx=10, expand=True)
 
         self.lbl_save_mo = ctk.CTkLabel(self.cards_frame, text="Monthly Savings\n₱ 0.00", font=("Segoe UI", 18, "bold"), fg_color="#006400", corner_radius=8, width=250, height=80)
@@ -368,7 +369,7 @@ class TenantTrackerApp(ctk.CTk):
         self.exp_table_frame = ctk.CTkFrame(self.sum_content)
         self.exp_table_frame.pack(side="right", fill="both", expand=True)
 
-        self.exp_cols = ("ID", "Category", "Amount", "Due Date", "Status")
+        self.exp_cols = ("ID", "Category", "Amount", "Due Date", "Status", "Last Edited")
         self.exp_table = ttk.Treeview(self.exp_table_frame, columns=self.exp_cols, show="headings")
         
         self.exp_scroll_y = ctk.CTkScrollbar(self.exp_table_frame, orientation="vertical", command=self.exp_table.yview)
@@ -377,10 +378,11 @@ class TenantTrackerApp(ctk.CTk):
         
         for col in self.exp_cols: self.exp_table.heading(col, text=col)
         self.exp_table.column("ID", width=40, anchor="center")
-        self.exp_table.column("Category", width=250, anchor="w")
-        self.exp_table.column("Amount", width=120, anchor="center")
-        self.exp_table.column("Due Date", width=120, anchor="center")
-        self.exp_table.column("Status", width=100, anchor="center")
+        self.exp_table.column("Category", width=220, anchor="w")
+        self.exp_table.column("Amount", width=100, anchor="center")
+        self.exp_table.column("Due Date", width=100, anchor="center")
+        self.exp_table.column("Status", width=90, anchor="center")
+        self.exp_table.column("Last Edited", width=150, anchor="center")
         self.exp_table.pack(fill="both", expand=True, padx=(10, 0), pady=(10, 0))
 
         # Expense Actions
@@ -404,23 +406,19 @@ class TenantTrackerApp(ctk.CTk):
 
         # 1. Load Expense Table for Selected Month
         for item in self.exp_table.get_children(): self.exp_table.delete(item)
-        cursor.execute("SELECT id, category, amount, due_date, status FROM expenses WHERE month_year=?", (month_str,))
+        cursor.execute("SELECT id, category, amount, due_date, status, last_edited FROM expenses WHERE month_year=?", (month_str,))
         for row in cursor.fetchall():
             self.exp_table.insert("", "end", values=row)
 
-        # 2. Calculate Dashboard Stats (STRICTLY "PAID" TRANSACTIONS ONLY)
-        # Monthly Income 
+        # 2. Calculate Dashboard Stats
         cursor.execute("SELECT SUM(amount) FROM financials WHERE status='Paid' AND due_date LIKE ?", (f"{month_str}%",))
         mo_income = cursor.fetchone()[0] or 0.0
 
-        # Monthly Expenses (Only counts expenses you have actually Paid)
         cursor.execute("SELECT SUM(amount) FROM expenses WHERE status='Paid' AND month_year=?", (month_str,))
         mo_expenses = cursor.fetchone()[0] or 0.0
         
-        # Monthly Savings
         mo_savings = mo_income - mo_expenses
 
-        # Total Savings (All-Time Paid Income - All-Time Paid Expenses)
         cursor.execute("SELECT SUM(amount) FROM financials WHERE status='Paid'")
         total_income = cursor.fetchone()[0] or 0.0
         cursor.execute("SELECT SUM(amount) FROM expenses WHERE status='Paid'")
@@ -448,6 +446,7 @@ class TenantTrackerApp(ctk.CTk):
         date = self.exp_date_entry.get()
         status = self.exp_status_combo.get()
         month_str = self.selected_month.get()
+        timestamp = time.strftime('%Y-%m-%d %I:%M %p')
 
         if not amt: return messagebox.showerror("Error", "Please enter an amount.")
 
@@ -455,11 +454,11 @@ class TenantTrackerApp(ctk.CTk):
         cursor = conn.cursor()
         
         if self.exp_editing_id:
-            cursor.execute("UPDATE expenses SET category=?, amount=?, due_date=?, status=?, month_year=? WHERE id=?", 
-                           (cat, amt, date, status, month_str, self.exp_editing_id))
+            cursor.execute("UPDATE expenses SET category=?, amount=?, due_date=?, status=?, month_year=?, last_edited=? WHERE id=?", 
+                           (cat, amt, date, status, month_str, timestamp, self.exp_editing_id))
         else:
-            cursor.execute("INSERT INTO expenses (month_year, category, amount, due_date, status) VALUES (?, ?, ?, ?, ?)", 
-                           (month_str, cat, amt, date, status))
+            cursor.execute("INSERT INTO expenses (month_year, category, amount, due_date, status, last_edited) VALUES (?, ?, ?, ?, ?, ?)", 
+                           (month_str, cat, amt, date, status, timestamp))
         
         conn.commit()
         conn.close()
@@ -484,8 +483,9 @@ class TenantTrackerApp(ctk.CTk):
         selected = self.exp_table.selection()
         if not selected: return
         e_id = self.exp_table.item(selected[0])['values'][0]
+        timestamp = time.strftime('%Y-%m-%d %I:%M %p')
         conn = sqlite3.connect('tenant_tracker.db')
-        conn.cursor().execute("UPDATE expenses SET status='Paid' WHERE id=?", (e_id,))
+        conn.cursor().execute("UPDATE expenses SET status='Paid', last_edited=? WHERE id=?", (timestamp, e_id))
         conn.commit()
         conn.close()
         self.refresh_summary_dashboard()
@@ -539,7 +539,7 @@ class TenantTrackerApp(ctk.CTk):
         for item in self.fin_table.get_children(): self.fin_table.delete(item)
         conn = sqlite3.connect('tenant_tracker.db')
         cursor = conn.cursor()
-        cursor.execute("SELECT id, tenant_name, type, amount, due_date, status FROM financials")
+        cursor.execute("SELECT id, tenant_name, type, amount, due_date, status, last_edited FROM financials")
         for row in cursor.fetchall():
             self.fin_table.insert("", "end", values=row)
         conn.close()
@@ -557,15 +557,16 @@ class TenantTrackerApp(ctk.CTk):
         t_amount = self.fin_amount_entry.get()
         t_due = self.fin_due_entry.get()
         t_status = self.fin_status_combo.get()
+        timestamp = time.strftime('%Y-%m-%d %I:%M %p')
 
         conn = sqlite3.connect('tenant_tracker.db')
         cursor = conn.cursor()
         if self.editing_fin_id:
-            cursor.execute("UPDATE financials SET tenant_name=?, type=?, amount=?, due_date=?, status=? WHERE id=?", 
-                           (t_name, t_type, t_amount, t_due, t_status, self.editing_fin_id))
+            cursor.execute("UPDATE financials SET tenant_name=?, type=?, amount=?, due_date=?, status=?, last_edited=? WHERE id=?", 
+                           (t_name, t_type, t_amount, t_due, t_status, timestamp, self.editing_fin_id))
         else:
-            cursor.execute("INSERT INTO financials (tenant_name, type, amount, due_date, status) VALUES (?, ?, ?, ?, ?)", 
-                           (t_name, t_type, t_amount, t_due, t_status))
+            cursor.execute("INSERT INTO financials (tenant_name, type, amount, due_date, status, last_edited) VALUES (?, ?, ?, ?, ?, ?)", 
+                           (t_name, t_type, t_amount, t_due, t_status, timestamp))
         conn.commit()
         conn.close()
 
@@ -608,8 +609,9 @@ class TenantTrackerApp(ctk.CTk):
         selected = self.fin_table.selection()
         if not selected: return
         f_id = self.fin_table.item(selected[0])['values'][0]
+        timestamp = time.strftime('%Y-%m-%d %I:%M %p')
         conn = sqlite3.connect('tenant_tracker.db')
-        conn.cursor().execute("UPDATE financials SET status='Paid' WHERE id=?", (f_id,))
+        conn.cursor().execute("UPDATE financials SET status='Paid', last_edited=? WHERE id=?", (timestamp, f_id))
         conn.commit()
         conn.close()
         self.load_fin_from_db()

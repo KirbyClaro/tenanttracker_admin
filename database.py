@@ -29,6 +29,7 @@ def init_db():
         )
     ''')
 
+    # Added last_edited column
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS financials (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -36,10 +37,12 @@ def init_db():
             type TEXT,
             amount REAL,
             due_date TEXT,
-            status TEXT DEFAULT 'Pending'
+            status TEXT DEFAULT 'Pending',
+            last_edited TEXT
         )
     ''')
 
+    # Added last_edited column
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS expenses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,7 +50,8 @@ def init_db():
             category TEXT,
             amount REAL,
             due_date TEXT,
-            status TEXT DEFAULT 'Pending'
+            status TEXT DEFAULT 'Pending',
+            last_edited TEXT
         )
     ''')
 
