@@ -109,7 +109,6 @@ class TenantTrackerApp(ctk.CTk):
         self.clock_label.pack(side="right")
         self.update_clock()
 
-        # FIXED: Removed hardcoded dark color, now supports Light/Dark mode switching
         self.search_frame = ctk.CTkFrame(self.tab_tenants, fg_color=("#e5e5e5", "#2b2b2b"))
         self.search_frame.pack(fill="x", padx=10, pady=(0, 10))
 
@@ -128,7 +127,6 @@ class TenantTrackerApp(ctk.CTk):
         )
         self.search_entry.pack(side="left", padx=(0, 10), pady=10)
 
-        # FIXED: Color tuples
         self.reset_cols_btn = ctk.CTkButton(
             self.search_frame, text="Reset Columns", command=self.reset_table_columns, 
             width=120, fg_color=("#d3d3d3", "#565b5e"), hover_color=("#c8c8c8", "#343638"), text_color=("black", "white")
@@ -243,7 +241,6 @@ class TenantTrackerApp(ctk.CTk):
         self.delete_btn = ctk.CTkButton(self.action_frame, text="Delete Selected", command=self.delete_tenant, fg_color="#8B0000", hover_color="#660000", text_color="white")
         self.delete_btn.pack(side="left", padx=(0, 10))
         
-        # FIXED: Color tuples
         self.export_tenants_btn = ctk.CTkButton(self.action_frame, text="Export to CSV", command=lambda: self.export_to_csv('tenants'), fg_color=("#d3d3d3", "#2b2b2b"), hover_color=("#c8c8c8", "#565b5e"), text_color=("black", "white"), border_color="#1f538d", border_width=2)
         self.export_tenants_btn.pack(side="right")
 
@@ -455,37 +452,53 @@ class TenantTrackerApp(ctk.CTk):
         self.set_content = ctk.CTkFrame(self.tab_settings, fg_color="transparent")
         self.set_content.pack(fill="both", expand=True, padx=10, pady=10)
 
-        self.left_settings = ctk.CTkFrame(self.set_content, width=400)
+        # LEFT COLUMN (Now Scrollable for more space)
+        self.left_settings = ctk.CTkScrollableFrame(self.set_content, width=450)
         self.left_settings.pack(side="left", fill="y", padx=(0, 10), expand=True)
 
-        ctk.CTkLabel(self.left_settings, text="Preferences", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(15, 15), anchor="w", padx=20)
+        ctk.CTkLabel(self.left_settings, text="Preferences", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(10, 10), anchor="w", padx=10)
         
-        ctk.CTkLabel(self.left_settings, text="UI Theme Appearance").pack(anchor="w", padx=20)
+        ctk.CTkLabel(self.left_settings, text="UI Theme Appearance").pack(anchor="w", padx=10)
         self.theme_var = ctk.StringVar(value=self.app_settings.get("theme", "System"))
         self.theme_menu = ctk.CTkOptionMenu(self.left_settings, values=["System", "Dark", "Light"], variable=self.theme_var, command=self.change_theme)
-        self.theme_menu.pack(anchor="w", padx=20, pady=(0, 20))
+        self.theme_menu.pack(anchor="w", padx=10, pady=(0, 20))
 
-        ctk.CTkLabel(self.left_settings, text="Email Automations (For Reminders)", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(15, 15), anchor="w", padx=20)
+        ctk.CTkLabel(self.left_settings, text="Email Automations (For Reminders)", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(10, 10), anchor="w", padx=10)
         
-        ctk.CTkLabel(self.left_settings, text="Sender Email Address").pack(anchor="w", padx=20)
-        self.email_entry = ctk.CTkEntry(self.left_settings, width=300)
+        ctk.CTkLabel(self.left_settings, text="Sender Email Address").pack(anchor="w", padx=10)
+        self.email_entry = ctk.CTkEntry(self.left_settings, width=350)
         self.email_entry.insert(0, self.app_settings.get("sender_email", ""))
-        self.email_entry.pack(anchor="w", padx=20, pady=(0, 10))
+        self.email_entry.pack(anchor="w", padx=10, pady=(0, 10))
 
-        ctk.CTkLabel(self.left_settings, text="App Password (Not your normal password)").pack(anchor="w", padx=20)
-        self.pass_entry = ctk.CTkEntry(self.left_settings, width=300, show="*")
+        ctk.CTkLabel(self.left_settings, text="App Password (Not your normal password)").pack(anchor="w", padx=10)
+        self.pass_entry = ctk.CTkEntry(self.left_settings, width=350, show="*")
         self.pass_entry.insert(0, self.app_settings.get("sender_password", ""))
-        self.pass_entry.pack(anchor="w", padx=20, pady=(0, 20))
+        self.pass_entry.pack(anchor="w", padx=10, pady=(0, 10))
 
-        self.save_settings_btn = ctk.CTkButton(self.left_settings, text="Save Email Settings", command=self.save_app_settings, fg_color="green", hover_color="darkgreen", text_color="white")
-        self.save_settings_btn.pack(anchor="w", padx=20, pady=10)
+        ctk.CTkLabel(self.left_settings, text="Send Reminder How Many Days Before Due?").pack(anchor="w", padx=10)
+        self.days_combo = ctk.CTkComboBox(self.left_settings, values=["1", "2", "3", "5", "7", "10"], width=350)
+        self.days_combo.set(self.app_settings.get("reminder_days", "3"))
+        self.days_combo.pack(anchor="w", padx=10, pady=(0, 10))
 
+        ctk.CTkLabel(self.left_settings, text="Custom Email Template").pack(anchor="w", padx=10)
+        ctk.CTkLabel(self.left_settings, text="Use exact tags: {name}, {amount}, {date}", text_color="gray", font=ctk.CTkFont(size=11, slant="italic")).pack(anchor="w", padx=10)
+        self.template_box = ctk.CTkTextbox(self.left_settings, width=350, height=120)
+        
+        default_template = "Hi {name},\n\nThis is a friendly reminder from management that your rent of ₱{amount} is due on {date}.\n\nPlease ensure your payment is ready.\n\nThank you!"
+        saved_template = self.app_settings.get("email_template", default_template)
+        self.template_box.insert("1.0", saved_template)
+        self.template_box.pack(anchor="w", padx=10, pady=(0, 20))
+
+        self.save_settings_btn = ctk.CTkButton(self.left_settings, text="Save Email & Automation Settings", command=self.save_app_settings, fg_color="green", hover_color="darkgreen", text_color="white")
+        self.save_settings_btn.pack(anchor="w", padx=10, pady=10)
+
+        # RIGHT COLUMN
         self.right_settings = ctk.CTkFrame(self.set_content, width=400)
         self.right_settings.pack(side="right", fill="both", expand=True)
 
-        ctk.CTkLabel(self.right_settings, text="Data Security & Backups", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(15, 15), anchor="w", padx=20)
+        ctk.CTkLabel(self.right_settings, text="Data Security & Backups", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(20, 15), anchor="w", padx=20)
         
-        backup_desc = ctk.CTkLabel(self.right_settings, text="Create a secure, portable ZIP file containing your database and all uploaded ID pictures. Keep this safe!", wraplength=350, justify="left")
+        backup_desc = ctk.CTkLabel(self.right_settings, text="Create a secure, portable ZIP file containing your database and all uploaded ID pictures. Keep this safe on a USB drive!", wraplength=350, justify="left")
         backup_desc.pack(anchor="w", padx=20, pady=(0, 10))
 
         self.backup_btn = ctk.CTkButton(self.right_settings, text="💾 Create Full System Backup", command=self.create_backup, fg_color="#B8860B", hover_color="#8B6508", text_color="white", font=ctk.CTkFont(weight="bold"))
@@ -493,30 +506,29 @@ class TenantTrackerApp(ctk.CTk):
 
     # --- Settings Functions ---
     def change_theme(self, new_theme):
-        # Update CustomTkinter widgets
         ctk.set_appearance_mode(new_theme)
-        
-        # Save to database
         conn = sqlite3.connect('tenant_tracker.db')
         conn.cursor().execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('theme', ?)", (new_theme,))
         conn.commit()
         conn.close()
-        
-        # Manually update standard tkinter Treeview styles
         self.apply_table_theme()
 
     def save_app_settings(self):
         email = self.email_entry.get()
         password = self.pass_entry.get()
+        days = self.days_combo.get()
+        template = self.template_box.get("1.0", "end-1c")
 
         conn = sqlite3.connect('tenant_tracker.db')
         cursor = conn.cursor()
         cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('sender_email', ?)", (email,))
         cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('sender_password', ?)", (password,))
+        cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('reminder_days', ?)", (days,))
+        cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('email_template', ?)", (template,))
         conn.commit()
         conn.close()
         
-        messagebox.showinfo("Success", "Email configuration saved securely to database.")
+        messagebox.showinfo("Success", "Email configuration and reminder settings saved securely.")
 
     def create_backup(self):
         folder = filedialog.askdirectory(title="Select Backup Folder")
