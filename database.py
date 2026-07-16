@@ -40,17 +40,14 @@ def init_db():
         )
     ''')
 
-    # NEW: Table for monthly utilities and expenses
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS expenses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            month_year TEXT UNIQUE,
-            water REAL DEFAULT 0.0,
-            electric REAL DEFAULT 0.0,
-            internet REAL DEFAULT 0.0,
-            garbage REAL DEFAULT 0.0,
-            maintenance REAL DEFAULT 0.0,
-            misc REAL DEFAULT 0.0
+            month_year TEXT,
+            category TEXT,
+            amount REAL,
+            due_date TEXT,
+            status TEXT DEFAULT 'Pending'
         )
     ''')
 

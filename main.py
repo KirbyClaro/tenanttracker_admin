@@ -38,6 +38,7 @@ class TenantTrackerApp(ctk.CTk):
         self.editing_tenant_id = None
         self.fin_form_visible = False
         self.editing_fin_id = None
+        self.exp_editing_id = None
 
         self.setup_tenant_tab()
         self.setup_financials_tab() 
@@ -290,148 +291,222 @@ class TenantTrackerApp(ctk.CTk):
         self.load_fin_from_db()
 
     # ==========================================
-    # TAB 3: MONTHLY SUMMARY & UTILITIES
+    # TAB 3: MONTHLY SUMMARY & EXPENSES
     # ==========================================
     def setup_summary_tab(self):
-        self.sum_header = ctk.CTkFrame(self.tab_summary, fg_color="transparent")
-        self.sum_header.pack(fill="x", padx=10, pady=10)
-
-        self.sum_title = ctk.CTkLabel(self.sum_header, text="Monthly Overview & Expenses", font=ctk.CTkFont(size=24, weight="bold"))
-        self.sum_title.pack(side="left")
-
-        # Generate the last few and next few months dynamically for the dropdown
-        current_year = datetime.now().year
-        self.month_list = [f"{current_year}-{str(m).zfill(2)}" for m in range(1, 13)] + [f"{current_year+1}-{str(m).zfill(2)}" for m in range(1, 13)]
+        # 1. Top Dashboard (Savings Tracker)
+        self.dash_frame = ctk.CTkFrame(self.tab_summary, fg_color="transparent")
+        self.dash_frame.pack(fill="x", padx=10, pady=10)
         
+        # Month Selector
+        self.month_list = [f"{datetime.now().year}-{str(m).zfill(2)}" for m in range(1, 13)]
         self.selected_month = ctk.StringVar(value=datetime.now().strftime('%Y-%m'))
-        self.month_combo = ctk.CTkOptionMenu(self.sum_header, values=self.month_list, variable=self.selected_month, command=self.load_summary_data)
-        self.month_combo.pack(side="right", padx=10)
-        ctk.CTkLabel(self.sum_header, text="Select Month:").pack(side="right")
+        
+        self.header_top = ctk.CTkFrame(self.dash_frame, fg_color="transparent")
+        self.header_top.pack(fill="x", pady=(0, 10))
+        ctk.CTkLabel(self.header_top, text="Business Savings Tracker", font=ctk.CTkFont(size=24, weight="bold")).pack(side="left")
+        ctk.CTkOptionMenu(self.header_top, values=self.month_list, variable=self.selected_month, command=self.refresh_summary_dashboard).pack(side="right", padx=10)
+        ctk.CTkLabel(self.header_top, text="Select Month:").pack(side="right")
 
+        # Stat Cards
+        self.cards_frame = ctk.CTkFrame(self.dash_frame, fg_color="transparent")
+        self.cards_frame.pack(fill="x")
+
+        self.lbl_inc = ctk.CTkLabel(self.cards_frame, text="Monthly Income\n₱ 0.00", font=("Segoe UI", 16, "bold"), fg_color="#1f538d", corner_radius=8, width=250, height=80)
+        self.lbl_inc.pack(side="left", padx=10, expand=True)
+
+        self.lbl_exp = ctk.CTkLabel(self.cards_frame, text="Monthly Expenses\n₱ 0.00", font=("Segoe UI", 16, "bold"), fg_color="#8B0000", corner_radius=8, width=250, height=80)
+        self.lbl_exp.pack(side="left", padx=10, expand=True)
+
+        self.lbl_save_mo = ctk.CTkLabel(self.cards_frame, text="Monthly Savings\n₱ 0.00", font=("Segoe UI", 18, "bold"), fg_color="#006400", corner_radius=8, width=250, height=80)
+        self.lbl_save_mo.pack(side="left", padx=10, expand=True)
+
+        self.lbl_save_tot = ctk.CTkLabel(self.cards_frame, text="Total Savings (All-Time)\n₱ 0.00", font=("Segoe UI", 18, "bold"), fg_color="#B8860B", corner_radius=8, width=250, height=80)
+        self.lbl_save_tot.pack(side="left", padx=10, expand=True)
+
+        # Separator
+        ctk.CTkFrame(self.tab_summary, height=2, fg_color="#565b5e").pack(fill="x", padx=10, pady=10)
+
+        # 2. Main Content (Left Form, Right Table)
         self.sum_content = ctk.CTkFrame(self.tab_summary, fg_color="transparent")
-        self.sum_content.pack(fill="both", expand=True, padx=10, pady=10)
+        self.sum_content.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
-        # Left: Input Form for Utilities
-        self.exp_frame = ctk.CTkFrame(self.sum_content, width=350)
-        self.exp_frame.pack(side="left", fill="y", padx=(0, 20))
+        # LEFT: Expense Input Form
+        self.exp_form_frame = ctk.CTkFrame(self.sum_content, width=350)
+        self.exp_form_frame.pack(side="left", fill="y", padx=(0, 10))
 
-        ctk.CTkLabel(self.exp_frame, text="Enter Monthly Bills", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(15, 10))
+        ctk.CTkLabel(self.exp_form_frame, text="Log Overall Expense", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(15, 15))
 
-        self.exp_vars = {
-            "Water Bill": ctk.StringVar(),
-            "Electric Bill": ctk.StringVar(),
-            "Internet": ctk.StringVar(),
-            "Garbage Disposal": ctk.StringVar(),
-            "Maintenance": ctk.StringVar(),
-            "Miscellaneous": ctk.StringVar()
-        }
+        self.exp_cat_combo = ctk.CTkComboBox(self.exp_form_frame, width=300, values=[
+            "Water Bill", "Electric Bill", "Internet", "Garbage Pickup", 
+            "Monthly Maintenance Fee", "Monthly Miscellaneous"
+        ])
+        ctk.CTkLabel(self.exp_form_frame, text="Expense Category").pack(anchor="w", padx=10)
+        self.exp_cat_combo.pack(padx=10, pady=(0, 10))
 
-        for label_text, var in self.exp_vars.items():
-            var.trace_add("write", lambda *args, v=var: self.validate_numeric_var(v))
-            ctk.CTkLabel(self.exp_frame, text=label_text).pack(anchor="w", padx=15, pady=(5, 0))
-            ctk.CTkEntry(self.exp_frame, textvariable=var, width=250).pack(padx=15, pady=(0, 5))
+        self.exp_amt_var = ctk.StringVar()
+        self.exp_amt_var.trace_add("write", lambda *args: self.validate_numeric_var(self.exp_amt_var))
+        self.exp_amt_entry = ctk.CTkEntry(self.exp_form_frame, width=300, textvariable=self.exp_amt_var)
+        ctk.CTkLabel(self.exp_form_frame, text="Amount Due").pack(anchor="w", padx=10)
+        self.exp_amt_entry.pack(padx=10, pady=(0, 10))
 
-        self.save_exp_btn = ctk.CTkButton(self.exp_frame, text="Save Expenses", command=self.save_expenses, fg_color="green", hover_color="darkgreen")
-        self.save_exp_btn.pack(pady=20, padx=15, fill="x")
+        self.exp_date_entry = DateEntry(self.exp_form_frame, width=45, font=('Segoe UI', 11), background='#1f538d', foreground='white', borderwidth=0, date_pattern='yyyy-mm-dd')
+        ctk.CTkLabel(self.exp_form_frame, text="Due Date").pack(anchor="w", padx=10)
+        self.exp_date_entry.pack(padx=10, pady=(0, 10), ipady=4)
 
-        # Right: Dashboard Display
-        self.dash_frame = ctk.CTkFrame(self.sum_content, fg_color="transparent")
-        self.dash_frame.pack(side="right", fill="both", expand=True)
+        self.exp_status_combo = ctk.CTkComboBox(self.exp_form_frame, width=300, values=["Pending", "Paid"])
+        ctk.CTkLabel(self.exp_form_frame, text="Payment Status").pack(anchor="w", padx=10)
+        self.exp_status_combo.pack(padx=10, pady=(0, 20))
 
-        # Dashboard Cards
-        self.income_card = ctk.CTkFrame(self.dash_frame, fg_color="#1f538d", corner_radius=10)
-        self.income_card.pack(fill="x", pady=10, ipady=20)
-        self.income_lbl = ctk.CTkLabel(self.income_card, text="Earnings this Month\n₱ 0.00", font=ctk.CTkFont(size=24, weight="bold"), text_color="white")
-        self.income_lbl.pack(expand=True)
+        self.exp_save_btn = ctk.CTkButton(self.exp_form_frame, text="Save Expense", command=self.save_expense_to_db, fg_color="green", hover_color="darkgreen")
+        self.exp_save_btn.pack(pady=10, padx=10, fill="x")
+        
+        self.exp_clear_btn = ctk.CTkButton(self.exp_form_frame, text="Clear Form", command=self.clear_exp_form, fg_color="#565b5e", hover_color="#343638")
+        self.exp_clear_btn.pack(pady=5, padx=10, fill="x")
 
-        self.expense_card = ctk.CTkFrame(self.dash_frame, fg_color="#8B0000", corner_radius=10)
-        self.expense_card.pack(fill="x", pady=10, ipady=20)
-        self.expense_lbl = ctk.CTkLabel(self.expense_card, text="Total Expenses\n₱ 0.00", font=ctk.CTkFont(size=24, weight="bold"), text_color="white")
-        self.expense_lbl.pack(expand=True)
+        # RIGHT: Expenses Table
+        self.exp_table_frame = ctk.CTkFrame(self.sum_content)
+        self.exp_table_frame.pack(side="right", fill="both", expand=True)
 
-        self.net_card = ctk.CTkFrame(self.dash_frame, fg_color="#006400", corner_radius=10)
-        self.net_card.pack(fill="x", pady=10, ipady=20)
-        self.net_lbl = ctk.CTkLabel(self.net_card, text="Total Savings (Net Profit)\n₱ 0.00", font=ctk.CTkFont(size=28, weight="bold"), text_color="white")
-        self.net_lbl.pack(expand=True)
+        self.exp_cols = ("ID", "Category", "Amount", "Due Date", "Status")
+        self.exp_table = ttk.Treeview(self.exp_table_frame, columns=self.exp_cols, show="headings")
+        
+        self.exp_scroll_y = ctk.CTkScrollbar(self.exp_table_frame, orientation="vertical", command=self.exp_table.yview)
+        self.exp_scroll_y.pack(side="right", fill="y", pady=(10, 0))
+        self.exp_table.configure(yscrollcommand=self.exp_scroll_y.set)
+        
+        for col in self.exp_cols: self.exp_table.heading(col, text=col)
+        self.exp_table.column("ID", width=40, anchor="center")
+        self.exp_table.column("Category", width=250, anchor="w")
+        self.exp_table.column("Amount", width=120, anchor="center")
+        self.exp_table.column("Due Date", width=120, anchor="center")
+        self.exp_table.column("Status", width=100, anchor="center")
+        self.exp_table.pack(fill="both", expand=True, padx=(10, 0), pady=(10, 0))
 
-        # Initial Load
-        self.load_summary_data()
+        # Expense Actions
+        self.exp_action_frame = ctk.CTkFrame(self.exp_table_frame, fg_color="transparent")
+        self.exp_action_frame.pack(fill="x", padx=10, pady=(10, 0))
 
-    # --- Summary Tab Functions ---
-    def load_summary_data(self, *args):
+        self.exp_paid_btn = ctk.CTkButton(self.exp_action_frame, text="Mark as Paid", command=self.mark_expense_paid, fg_color="green", hover_color="darkgreen")
+        self.exp_paid_btn.pack(side="left", padx=(0, 10))
+        self.exp_edit_btn = ctk.CTkButton(self.exp_action_frame, text="Edit Selected", command=self.load_expense_for_editing, fg_color="#B8860B", hover_color="#8B6508")
+        self.exp_edit_btn.pack(side="left", padx=(0, 10))
+        self.exp_delete_btn = ctk.CTkButton(self.exp_action_frame, text="Delete Selected", command=self.delete_expense, fg_color="#8B0000", hover_color="#660000")
+        self.exp_delete_btn.pack(side="left")
+
+        self.refresh_summary_dashboard()
+
+    # --- Summary & Expense Functions ---
+    def refresh_summary_dashboard(self, *args):
         month_str = self.selected_month.get()
         conn = sqlite3.connect('tenant_tracker.db')
         cursor = conn.cursor()
 
-        # 1. Get Income (Sum of Paid Financials matching this month in 'YYYY-MM' format)
+        # 1. Load Expense Table for Selected Month
+        for item in self.exp_table.get_children(): self.exp_table.delete(item)
+        cursor.execute("SELECT id, category, amount, due_date, status FROM expenses WHERE month_year=?", (month_str,))
+        for row in cursor.fetchall():
+            self.exp_table.insert("", "end", values=row)
+
+        # 2. Calculate Dashboard Stats
+        # Monthly Income (from Paid Tenant Financials in the selected month)
         cursor.execute("SELECT SUM(amount) FROM financials WHERE status='Paid' AND due_date LIKE ?", (f"{month_str}%",))
-        income = cursor.fetchone()[0]
-        income = income if income else 0.0
+        mo_income = cursor.fetchone()[0] or 0.0
 
-        # 2. Get Expenses for the selected month
-        cursor.execute("SELECT water, electric, internet, garbage, maintenance, misc FROM expenses WHERE month_year=?", (month_str,))
-        row = cursor.fetchone()
+        # Monthly Expenses (All logged expenses for the selected month)
+        cursor.execute("SELECT SUM(amount) FROM expenses WHERE month_year=?", (month_str,))
+        mo_expenses = cursor.fetchone()[0] or 0.0
+        
+        # Monthly Savings (Paid Income - Paid Expenses for this month)
+        cursor.execute("SELECT SUM(amount) FROM expenses WHERE status='Paid' AND month_year=?", (month_str,))
+        mo_paid_expenses = cursor.fetchone()[0] or 0.0
+        mo_savings = mo_income - mo_paid_expenses
 
-        if row:
-            # Populate form with existing data
-            self.exp_vars["Water Bill"].set(str(row[0]))
-            self.exp_vars["Electric Bill"].set(str(row[1]))
-            self.exp_vars["Internet"].set(str(row[2]))
-            self.exp_vars["Garbage Disposal"].set(str(row[3]))
-            self.exp_vars["Maintenance"].set(str(row[4]))
-            self.exp_vars["Miscellaneous"].set(str(row[5]))
-            total_expenses = sum(row)
-        else:
-            # Clear form if no data
-            for var in self.exp_vars.values(): var.set("")
-            total_expenses = 0.0
+        # Total Savings (All-Time Paid Income - All-Time Paid Expenses)
+        cursor.execute("SELECT SUM(amount) FROM financials WHERE status='Paid'")
+        total_income = cursor.fetchone()[0] or 0.0
+        cursor.execute("SELECT SUM(amount) FROM expenses WHERE status='Paid'")
+        total_paid_expenses = cursor.fetchone()[0] or 0.0
+        total_savings = total_income - total_paid_expenses
 
         conn.close()
 
-        # 3. Calculate Net Savings
-        net_savings = income - total_expenses
+        # 3. Update the UI Cards
+        self.lbl_inc.configure(text=f"Monthly Income\n₱ {mo_income:,.2f}")
+        self.lbl_exp.configure(text=f"Monthly Expenses\n₱ {mo_expenses:,.2f}")
+        self.lbl_save_mo.configure(text=f"Monthly Savings\n₱ {mo_savings:,.2f}")
+        self.lbl_save_tot.configure(text=f"Total Savings (All-Time)\n₱ {total_savings:,.2f}")
 
-        # 4. Update Dashboard UI
-        self.income_lbl.configure(text=f"Earnings this Month\n₱ {income:,.2f}")
-        self.expense_lbl.configure(text=f"Total Expenses\n₱ {total_expenses:,.2f}")
-        self.net_lbl.configure(text=f"Total Savings (Net Profit)\n₱ {net_savings:,.2f}")
+    def clear_exp_form(self):
+        self.exp_amt_entry.delete(0, 'end')
+        self.exp_date_entry.set_date(time.strftime('%Y-%m-%d'))
+        self.exp_status_combo.set("Pending")
+        self.exp_editing_id = None
+        self.exp_save_btn.configure(text="Save Expense", fg_color="green", hover_color="darkgreen")
 
-    def save_expenses(self):
+    def save_expense_to_db(self):
+        cat = self.exp_cat_combo.get()
+        amt = self.exp_amt_entry.get()
+        date = self.exp_date_entry.get()
+        status = self.exp_status_combo.get()
         month_str = self.selected_month.get()
-        
-        # Helper to convert empty strings to 0.0
-        def safe_float(val): return float(val) if val else 0.0
 
-        w = safe_float(self.exp_vars["Water Bill"].get())
-        e = safe_float(self.exp_vars["Electric Bill"].get())
-        i = safe_float(self.exp_vars["Internet"].get())
-        g = safe_float(self.exp_vars["Garbage Disposal"].get())
-        m = safe_float(self.exp_vars["Maintenance"].get())
-        misc = safe_float(self.exp_vars["Miscellaneous"].get())
+        if not amt: return messagebox.showerror("Error", "Please enter an amount.")
 
         conn = sqlite3.connect('tenant_tracker.db')
         cursor = conn.cursor()
         
-        # Check if record exists
-        cursor.execute("SELECT id FROM expenses WHERE month_year=?", (month_str,))
-        exists = cursor.fetchone()
-
-        if exists:
-            cursor.execute('''UPDATE expenses SET water=?, electric=?, internet=?, garbage=?, maintenance=?, misc=? WHERE month_year=?''', 
-                           (w, e, i, g, m, misc, month_str))
+        if self.exp_editing_id:
+            cursor.execute("UPDATE expenses SET category=?, amount=?, due_date=?, status=?, month_year=? WHERE id=?", 
+                           (cat, amt, date, status, month_str, self.exp_editing_id))
         else:
-            cursor.execute('''INSERT INTO expenses (month_year, water, electric, internet, garbage, maintenance, misc) VALUES (?, ?, ?, ?, ?, ?, ?)''', 
-                           (month_str, w, e, i, g, m, misc))
+            cursor.execute("INSERT INTO expenses (month_year, category, amount, due_date, status) VALUES (?, ?, ?, ?, ?)", 
+                           (month_str, cat, amt, date, status))
         
         conn.commit()
         conn.close()
+
+        self.clear_exp_form()
+        self.refresh_summary_dashboard()
+
+    def load_expense_for_editing(self):
+        selected = self.exp_table.selection()
+        if not selected: return
         
-        # Show success message and refresh dashboard
-        messagebox.showinfo("Success", f"Expenses saved for {month_str}")
-        self.load_summary_data()
+        vals = self.exp_table.item(selected[0])['values']
+        self.exp_editing_id = vals[0]
+        self.exp_cat_combo.set(vals[1])
+        self.exp_amt_entry.delete(0, 'end')
+        self.exp_amt_entry.insert(0, vals[2])
+        self.exp_date_entry.set_date(vals[3])
+        self.exp_status_combo.set(vals[4])
+        self.exp_save_btn.configure(text="Update Expense", fg_color="#B8860B", hover_color="#8B6508")
+
+    def mark_expense_paid(self):
+        selected = self.exp_table.selection()
+        if not selected: return
+        e_id = self.exp_table.item(selected[0])['values'][0]
+        conn = sqlite3.connect('tenant_tracker.db')
+        conn.cursor().execute("UPDATE expenses SET status='Paid' WHERE id=?", (e_id,))
+        conn.commit()
+        conn.close()
+        self.refresh_summary_dashboard()
+
+    def delete_expense(self):
+        selected = self.exp_table.selection()
+        if not selected: return
+        confirm = messagebox.askyesno("Confirm Deletion", "Are you sure you want to delete this expense?")
+        if confirm:
+            e_id = self.exp_table.item(selected[0])['values'][0]
+            conn = sqlite3.connect('tenant_tracker.db')
+            conn.cursor().execute("DELETE FROM expenses WHERE id=?", (e_id,))
+            conn.commit()
+            conn.close()
+            self.refresh_summary_dashboard()
+
 
     # ==========================================
-    # GLOBAL HELPER FUNCTIONS
+    # GLOBAL HELPER FUNCTIONS (Used by Tabs 1 & 2)
     # ==========================================
     def get_active_tenant_names(self):
         conn = sqlite3.connect('tenant_tracker.db')
@@ -499,7 +574,7 @@ class TenantTrackerApp(ctk.CTk):
         self.clear_fin_form()
         self.load_fin_from_db()
         self.toggle_fin_form()
-        self.load_summary_data() # Update the dashboard when a new transaction is added
+        self.refresh_summary_dashboard() 
 
     def load_fin_for_editing(self):
         selected = self.fin_table.selection()
@@ -521,7 +596,6 @@ class TenantTrackerApp(ctk.CTk):
     def delete_fin(self):
         selected = self.fin_table.selection()
         if not selected: return
-        
         confirm = messagebox.askyesno("Confirm Deletion", "Are you sure you want to delete this transaction?")
         if confirm:
             f_id = self.fin_table.item(selected[0])['values'][0]
@@ -530,7 +604,7 @@ class TenantTrackerApp(ctk.CTk):
             conn.commit()
             conn.close()
             self.load_fin_from_db()
-            self.load_summary_data() # Update the dashboard
+            self.refresh_summary_dashboard() 
 
     def mark_fin_paid(self):
         selected = self.fin_table.selection()
@@ -541,7 +615,7 @@ class TenantTrackerApp(ctk.CTk):
         conn.commit()
         conn.close()
         self.load_fin_from_db()
-        self.load_summary_data() # Live update the income on the summary tab!
+        self.refresh_summary_dashboard() 
 
     # --- Tenant Tab Functions ---
     def update_clock(self):
@@ -676,7 +750,6 @@ class TenantTrackerApp(ctk.CTk):
     def delete_tenant(self):
         selected = self.tenant_table.selection()
         if not selected: return
-        
         confirm = messagebox.askyesno("Confirm Deletion", "Are you sure you want to delete this tenant?\n\nThis action cannot be undone.")
         if confirm:
             conn = sqlite3.connect('tenant_tracker.db')
