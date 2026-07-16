@@ -1,8 +1,9 @@
 import customtkinter as ctk
 import tkinter.ttk as ttk
 import tkinter as tk
-from tkinter import filedialog, messagebox 
+from tkinter import filedialog, messagebox
 import time
+from datetime import datetime
 import sqlite3
 import os
 import shutil
@@ -29,18 +30,18 @@ class TenantTrackerApp(ctk.CTk):
 
         self.tab_tenants = self.tabview.add("Tenant Information")
         self.tab_financials = self.tabview.add("Financials")
+        self.tab_summary = self.tabview.add("Monthly Summary")
         self.tab_settings = self.tabview.add("Settings")
 
-        # Tenant Form States
+        # States
         self.form_visible = False
         self.editing_tenant_id = None
-        
-        # Financial Form States
         self.fin_form_visible = False
         self.editing_fin_id = None
 
         self.setup_tenant_tab()
         self.setup_financials_tab() 
+        self.setup_summary_tab()
 
     # ==========================================
     # TAB 1: TENANT MANAGEMENT
@@ -91,7 +92,7 @@ class TenantTrackerApp(ctk.CTk):
         self.contact_var = ctk.StringVar()
         self.contact_var.trace_add("write", self.validate_contact)
         self.monthly_var = ctk.StringVar()
-        self.monthly_var.trace_add("write", self.validate_monthly)
+        self.monthly_var.trace_add("write", lambda *args: self.validate_numeric_var(self.monthly_var))
         self.due_day_var = ctk.StringVar()
         self.due_day_var.trace_add("write", self.validate_due_day)
 
@@ -288,7 +289,150 @@ class TenantTrackerApp(ctk.CTk):
 
         self.load_fin_from_db()
 
-    # --- Financial Tab Functions ---
+    # ==========================================
+    # TAB 3: MONTHLY SUMMARY & UTILITIES
+    # ==========================================
+    def setup_summary_tab(self):
+        self.sum_header = ctk.CTkFrame(self.tab_summary, fg_color="transparent")
+        self.sum_header.pack(fill="x", padx=10, pady=10)
+
+        self.sum_title = ctk.CTkLabel(self.sum_header, text="Monthly Overview & Expenses", font=ctk.CTkFont(size=24, weight="bold"))
+        self.sum_title.pack(side="left")
+
+        # Generate the last few and next few months dynamically for the dropdown
+        current_year = datetime.now().year
+        self.month_list = [f"{current_year}-{str(m).zfill(2)}" for m in range(1, 13)] + [f"{current_year+1}-{str(m).zfill(2)}" for m in range(1, 13)]
+        
+        self.selected_month = ctk.StringVar(value=datetime.now().strftime('%Y-%m'))
+        self.month_combo = ctk.CTkOptionMenu(self.sum_header, values=self.month_list, variable=self.selected_month, command=self.load_summary_data)
+        self.month_combo.pack(side="right", padx=10)
+        ctk.CTkLabel(self.sum_header, text="Select Month:").pack(side="right")
+
+        self.sum_content = ctk.CTkFrame(self.tab_summary, fg_color="transparent")
+        self.sum_content.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # Left: Input Form for Utilities
+        self.exp_frame = ctk.CTkFrame(self.sum_content, width=350)
+        self.exp_frame.pack(side="left", fill="y", padx=(0, 20))
+
+        ctk.CTkLabel(self.exp_frame, text="Enter Monthly Bills", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(15, 10))
+
+        self.exp_vars = {
+            "Water Bill": ctk.StringVar(),
+            "Electric Bill": ctk.StringVar(),
+            "Internet": ctk.StringVar(),
+            "Garbage Disposal": ctk.StringVar(),
+            "Maintenance": ctk.StringVar(),
+            "Miscellaneous": ctk.StringVar()
+        }
+
+        for label_text, var in self.exp_vars.items():
+            var.trace_add("write", lambda *args, v=var: self.validate_numeric_var(v))
+            ctk.CTkLabel(self.exp_frame, text=label_text).pack(anchor="w", padx=15, pady=(5, 0))
+            ctk.CTkEntry(self.exp_frame, textvariable=var, width=250).pack(padx=15, pady=(0, 5))
+
+        self.save_exp_btn = ctk.CTkButton(self.exp_frame, text="Save Expenses", command=self.save_expenses, fg_color="green", hover_color="darkgreen")
+        self.save_exp_btn.pack(pady=20, padx=15, fill="x")
+
+        # Right: Dashboard Display
+        self.dash_frame = ctk.CTkFrame(self.sum_content, fg_color="transparent")
+        self.dash_frame.pack(side="right", fill="both", expand=True)
+
+        # Dashboard Cards
+        self.income_card = ctk.CTkFrame(self.dash_frame, fg_color="#1f538d", corner_radius=10)
+        self.income_card.pack(fill="x", pady=10, ipady=20)
+        self.income_lbl = ctk.CTkLabel(self.income_card, text="Earnings this Month\n₱ 0.00", font=ctk.CTkFont(size=24, weight="bold"), text_color="white")
+        self.income_lbl.pack(expand=True)
+
+        self.expense_card = ctk.CTkFrame(self.dash_frame, fg_color="#8B0000", corner_radius=10)
+        self.expense_card.pack(fill="x", pady=10, ipady=20)
+        self.expense_lbl = ctk.CTkLabel(self.expense_card, text="Total Expenses\n₱ 0.00", font=ctk.CTkFont(size=24, weight="bold"), text_color="white")
+        self.expense_lbl.pack(expand=True)
+
+        self.net_card = ctk.CTkFrame(self.dash_frame, fg_color="#006400", corner_radius=10)
+        self.net_card.pack(fill="x", pady=10, ipady=20)
+        self.net_lbl = ctk.CTkLabel(self.net_card, text="Total Savings (Net Profit)\n₱ 0.00", font=ctk.CTkFont(size=28, weight="bold"), text_color="white")
+        self.net_lbl.pack(expand=True)
+
+        # Initial Load
+        self.load_summary_data()
+
+    # --- Summary Tab Functions ---
+    def load_summary_data(self, *args):
+        month_str = self.selected_month.get()
+        conn = sqlite3.connect('tenant_tracker.db')
+        cursor = conn.cursor()
+
+        # 1. Get Income (Sum of Paid Financials matching this month in 'YYYY-MM' format)
+        cursor.execute("SELECT SUM(amount) FROM financials WHERE status='Paid' AND due_date LIKE ?", (f"{month_str}%",))
+        income = cursor.fetchone()[0]
+        income = income if income else 0.0
+
+        # 2. Get Expenses for the selected month
+        cursor.execute("SELECT water, electric, internet, garbage, maintenance, misc FROM expenses WHERE month_year=?", (month_str,))
+        row = cursor.fetchone()
+
+        if row:
+            # Populate form with existing data
+            self.exp_vars["Water Bill"].set(str(row[0]))
+            self.exp_vars["Electric Bill"].set(str(row[1]))
+            self.exp_vars["Internet"].set(str(row[2]))
+            self.exp_vars["Garbage Disposal"].set(str(row[3]))
+            self.exp_vars["Maintenance"].set(str(row[4]))
+            self.exp_vars["Miscellaneous"].set(str(row[5]))
+            total_expenses = sum(row)
+        else:
+            # Clear form if no data
+            for var in self.exp_vars.values(): var.set("")
+            total_expenses = 0.0
+
+        conn.close()
+
+        # 3. Calculate Net Savings
+        net_savings = income - total_expenses
+
+        # 4. Update Dashboard UI
+        self.income_lbl.configure(text=f"Earnings this Month\n₱ {income:,.2f}")
+        self.expense_lbl.configure(text=f"Total Expenses\n₱ {total_expenses:,.2f}")
+        self.net_lbl.configure(text=f"Total Savings (Net Profit)\n₱ {net_savings:,.2f}")
+
+    def save_expenses(self):
+        month_str = self.selected_month.get()
+        
+        # Helper to convert empty strings to 0.0
+        def safe_float(val): return float(val) if val else 0.0
+
+        w = safe_float(self.exp_vars["Water Bill"].get())
+        e = safe_float(self.exp_vars["Electric Bill"].get())
+        i = safe_float(self.exp_vars["Internet"].get())
+        g = safe_float(self.exp_vars["Garbage Disposal"].get())
+        m = safe_float(self.exp_vars["Maintenance"].get())
+        misc = safe_float(self.exp_vars["Miscellaneous"].get())
+
+        conn = sqlite3.connect('tenant_tracker.db')
+        cursor = conn.cursor()
+        
+        # Check if record exists
+        cursor.execute("SELECT id FROM expenses WHERE month_year=?", (month_str,))
+        exists = cursor.fetchone()
+
+        if exists:
+            cursor.execute('''UPDATE expenses SET water=?, electric=?, internet=?, garbage=?, maintenance=?, misc=? WHERE month_year=?''', 
+                           (w, e, i, g, m, misc, month_str))
+        else:
+            cursor.execute('''INSERT INTO expenses (month_year, water, electric, internet, garbage, maintenance, misc) VALUES (?, ?, ?, ?, ?, ?, ?)''', 
+                           (month_str, w, e, i, g, m, misc))
+        
+        conn.commit()
+        conn.close()
+        
+        # Show success message and refresh dashboard
+        messagebox.showinfo("Success", f"Expenses saved for {month_str}")
+        self.load_summary_data()
+
+    # ==========================================
+    # GLOBAL HELPER FUNCTIONS
+    # ==========================================
     def get_active_tenant_names(self):
         conn = sqlite3.connect('tenant_tracker.db')
         cursor = conn.cursor()
@@ -297,6 +441,15 @@ class TenantTrackerApp(ctk.CTk):
         conn.close()
         return names if names else ["No Active Tenants"]
 
+    def validate_numeric_var(self, str_var):
+        cv = str_var.get()
+        filtered = ''.join([c for c in cv if c.isdigit() or c == '.'])
+        if filtered.count('.') > 1:
+            parts = filtered.split('.')
+            filtered = parts[0] + '.' + ''.join(parts[1:])
+        if cv != filtered: str_var.set(filtered)
+
+    # --- Financial Tab Functions ---
     def toggle_fin_form(self):
         if self.fin_form_visible:
             self.fin_form_frame.pack_forget()
@@ -308,14 +461,6 @@ class TenantTrackerApp(ctk.CTk):
             self.fin_form_frame.pack(side="left", fill="y", padx=(0, 10), before=self.fin_table_frame)
             self.fin_toggle_btn.configure(text="- Close Form", fg_color="#8B0000", hover_color="#660000")
             self.fin_form_visible = True
-
-    def validate_numeric_var(self, str_var):
-        cv = str_var.get()
-        filtered = ''.join([c for c in cv if c.isdigit() or c == '.'])
-        if filtered.count('.') > 1:
-            parts = filtered.split('.')
-            filtered = parts[0] + '.' + ''.join(parts[1:])
-        if cv != filtered: str_var.set(filtered)
 
     def load_fin_from_db(self):
         for item in self.fin_table.get_children(): self.fin_table.delete(item)
@@ -354,6 +499,7 @@ class TenantTrackerApp(ctk.CTk):
         self.clear_fin_form()
         self.load_fin_from_db()
         self.toggle_fin_form()
+        self.load_summary_data() # Update the dashboard when a new transaction is added
 
     def load_fin_for_editing(self):
         selected = self.fin_table.selection()
@@ -376,7 +522,6 @@ class TenantTrackerApp(ctk.CTk):
         selected = self.fin_table.selection()
         if not selected: return
         
-        # Confirmation Pop-up for Financials
         confirm = messagebox.askyesno("Confirm Deletion", "Are you sure you want to delete this transaction?")
         if confirm:
             f_id = self.fin_table.item(selected[0])['values'][0]
@@ -385,6 +530,7 @@ class TenantTrackerApp(ctk.CTk):
             conn.commit()
             conn.close()
             self.load_fin_from_db()
+            self.load_summary_data() # Update the dashboard
 
     def mark_fin_paid(self):
         selected = self.fin_table.selection()
@@ -395,10 +541,9 @@ class TenantTrackerApp(ctk.CTk):
         conn.commit()
         conn.close()
         self.load_fin_from_db()
+        self.load_summary_data() # Live update the income on the summary tab!
 
-    # ==========================================
-    # TENANT TAB HELPER FUNCTIONS
-    # ==========================================
+    # --- Tenant Tab Functions ---
     def update_clock(self):
         current_time = time.strftime('%I:%M:%S %p | %B %d, %Y')
         self.clock_label.configure(text=current_time)
@@ -411,9 +556,6 @@ class TenantTrackerApp(ctk.CTk):
         cv = self.contact_var.get()
         no_letters = ''.join(filter(str.isdigit, cv))
         if cv != no_letters: self.contact_var.set(no_letters)
-
-    def validate_monthly(self, *args):
-        self.validate_numeric_var(self.monthly_var)
 
     def validate_due_day(self, *args):
         cv = self.due_day_var.get()
@@ -535,7 +677,6 @@ class TenantTrackerApp(ctk.CTk):
         selected = self.tenant_table.selection()
         if not selected: return
         
-        # Confirmation Pop-up for Tenants
         confirm = messagebox.askyesno("Confirm Deletion", "Are you sure you want to delete this tenant?\n\nThis action cannot be undone.")
         if confirm:
             conn = sqlite3.connect('tenant_tracker.db')

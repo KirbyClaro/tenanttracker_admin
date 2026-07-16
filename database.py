@@ -29,7 +29,6 @@ def init_db():
         )
     ''')
 
-    # Added tenant_name column to track who the record belongs to
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS financials (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -38,6 +37,20 @@ def init_db():
             amount REAL,
             due_date TEXT,
             status TEXT DEFAULT 'Pending'
+        )
+    ''')
+
+    # NEW: Table for monthly utilities and expenses
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS expenses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            month_year TEXT UNIQUE,
+            water REAL DEFAULT 0.0,
+            electric REAL DEFAULT 0.0,
+            internet REAL DEFAULT 0.0,
+            garbage REAL DEFAULT 0.0,
+            maintenance REAL DEFAULT 0.0,
+            misc REAL DEFAULT 0.0
         )
     ''')
 
