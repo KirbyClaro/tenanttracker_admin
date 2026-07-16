@@ -408,19 +408,17 @@ class TenantTrackerApp(ctk.CTk):
         for row in cursor.fetchall():
             self.exp_table.insert("", "end", values=row)
 
-        # 2. Calculate Dashboard Stats
-        # Monthly Income (from Paid Tenant Financials in the selected month)
+        # 2. Calculate Dashboard Stats (STRICTLY "PAID" TRANSACTIONS ONLY)
+        # Monthly Income 
         cursor.execute("SELECT SUM(amount) FROM financials WHERE status='Paid' AND due_date LIKE ?", (f"{month_str}%",))
         mo_income = cursor.fetchone()[0] or 0.0
 
-        # Monthly Expenses (All logged expenses for the selected month)
-        cursor.execute("SELECT SUM(amount) FROM expenses WHERE month_year=?", (month_str,))
+        # Monthly Expenses (Only counts expenses you have actually Paid)
+        cursor.execute("SELECT SUM(amount) FROM expenses WHERE status='Paid' AND month_year=?", (month_str,))
         mo_expenses = cursor.fetchone()[0] or 0.0
         
-        # Monthly Savings (Paid Income - Paid Expenses for this month)
-        cursor.execute("SELECT SUM(amount) FROM expenses WHERE status='Paid' AND month_year=?", (month_str,))
-        mo_paid_expenses = cursor.fetchone()[0] or 0.0
-        mo_savings = mo_income - mo_paid_expenses
+        # Monthly Savings
+        mo_savings = mo_income - mo_expenses
 
         # Total Savings (All-Time Paid Income - All-Time Paid Expenses)
         cursor.execute("SELECT SUM(amount) FROM financials WHERE status='Paid'")
@@ -432,8 +430,8 @@ class TenantTrackerApp(ctk.CTk):
         conn.close()
 
         # 3. Update the UI Cards
-        self.lbl_inc.configure(text=f"Monthly Income\n₱ {mo_income:,.2f}")
-        self.lbl_exp.configure(text=f"Monthly Expenses\n₱ {mo_expenses:,.2f}")
+        self.lbl_inc.configure(text=f"Monthly Income (Paid)\n₱ {mo_income:,.2f}")
+        self.lbl_exp.configure(text=f"Monthly Expenses (Paid)\n₱ {mo_expenses:,.2f}")
         self.lbl_save_mo.configure(text=f"Monthly Savings\n₱ {mo_savings:,.2f}")
         self.lbl_save_tot.configure(text=f"Total Savings (All-Time)\n₱ {total_savings:,.2f}")
 
