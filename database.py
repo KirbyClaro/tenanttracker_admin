@@ -29,13 +29,15 @@ def init_db():
         )
     ''')
 
+    # Added tenant_name column to track who the record belongs to
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS financials (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_name TEXT,
             type TEXT,
             amount REAL,
             due_date TEXT,
-            status TEXT DEFAULT 'pending'
+            status TEXT DEFAULT 'Pending'
         )
     ''')
 
