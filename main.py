@@ -87,7 +87,6 @@ class TenantTrackerApp(ctk.CTk):
 
         self.entries = {}
         
-        # Added "Rent Due Day"
         self.fields = [
             "Status", "Full Name", "Address", "Room Number", "Date Started",
             "Lease Term", "Move Out Date", "Monthly Due", "Rent Due Day", "Valid ID", "Working/Job",
@@ -183,6 +182,10 @@ class TenantTrackerApp(ctk.CTk):
         self.action_frame = ctk.CTkFrame(self.table_frame, fg_color="transparent")
         self.action_frame.pack(fill="x", padx=10, pady=(10, 0))
 
+        # New View Button
+        self.view_btn = ctk.CTkButton(self.action_frame, text="View Selected", command=self.view_tenant_details, fg_color="#1f538d", hover_color="#14375e")
+        self.view_btn.pack(side="left", padx=(0, 10))
+
         self.edit_btn = ctk.CTkButton(self.action_frame, text="Edit Selected", command=self.load_for_editing, fg_color="#B8860B", hover_color="#8B6508")
         self.edit_btn.pack(side="left", padx=(0, 10))
 
@@ -190,6 +193,58 @@ class TenantTrackerApp(ctk.CTk):
         self.delete_btn.pack(side="left")
 
         self.load_tenants_from_db()
+
+    def view_tenant_details(self):
+        selected_item = self.tenant_table.selection()
+        if not selected_item: 
+            return # Do nothing if no row is selected
+            
+        item_values = self.tenant_table.item(selected_item[0])['values']
+        tenant_name = str(item_values[2])
+        
+        # Create the pop-up window
+        view_win = ctk.CTkToplevel(self)
+        view_win.title(f"Tenant Card: {tenant_name}")
+        view_win.geometry("500x700")
+        view_win.attributes("-topmost", True) # Keep window on top so it doesn't get lost
+        
+        # Header Label
+        header = ctk.CTkLabel(view_win, text=f"Data for: {tenant_name}", font=ctk.CTkFont(size=20, weight="bold"))
+        header.pack(pady=(20, 10))
+        
+        # Scrollable container for the data
+        scroll_frame = ctk.CTkScrollableFrame(view_win, width=450, height=550)
+        scroll_frame.pack(padx=20, pady=10, fill="both", expand=True)
+        
+        # Iterate through the columns and display them
+        for idx, col_name in enumerate(self.columns):
+            val = item_values[idx]
+            display_val = str(val) if val != "None" and val != "" else "N/A"
+            
+            if col_name == "Notes":
+                # Special handling for Notes: Give it a read-only text box
+                lbl_title = ctk.CTkLabel(scroll_frame, text=f"{col_name}:", font=ctk.CTkFont(weight="bold"))
+                lbl_title.pack(anchor="w", pady=(15, 0), padx=5)
+                
+                textbox = ctk.CTkTextbox(scroll_frame, width=420, height=100)
+                textbox.pack(anchor="w", pady=(0, 10), padx=5)
+                textbox.insert("1.0", display_val)
+                textbox.configure(state="disabled") # Prevents typing
+            else:
+                # Standard row design for other details
+                row_frame = ctk.CTkFrame(scroll_frame, fg_color="transparent")
+                row_frame.pack(fill="x", pady=4, padx=5)
+                
+                lbl_title = ctk.CTkLabel(row_frame, text=f"{col_name}:", font=ctk.CTkFont(weight="bold"), width=120, anchor="w")
+                lbl_title.pack(side="left")
+                
+                # wraplength allows long text like addresses to break to a new line
+                lbl_val = ctk.CTkLabel(row_frame, text=display_val, anchor="w", wraplength=280, justify="left")
+                lbl_val.pack(side="left", fill="x", expand=True)
+        
+        # Close Button at the bottom
+        close_btn = ctk.CTkButton(view_win, text="Close Window", command=view_win.destroy, fg_color="#565b5e", hover_color="#343638")
+        close_btn.pack(pady=(10, 20))
 
     def show_context_menu(self, event):
         region = self.tenant_table.identify_region(event.x, event.y)
@@ -257,7 +312,7 @@ class TenantTrackerApp(ctk.CTk):
         cv = self.due_day_var.get()
         no_letters = ''.join(filter(str.isdigit, cv))
         if no_letters:
-            if int(no_letters) > 31: # Cap it at 31 (days in a month)
+            if int(no_letters) > 31: 
                 no_letters = "31"
         if cv != no_letters: 
             self.due_day_var.set(no_letters)
