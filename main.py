@@ -84,7 +84,6 @@ class TenantTrackerApp(ctk.CTk):
 
         self.entries = {}
         
-        # Cleaned up fields
         self.fields = [
             "Status", "Full Name", "Address", "Room Number", "Date Started",
             "Lease Term", "Move Out Date", "Monthly Due", "Valid ID", "Working/Job",
@@ -145,11 +144,10 @@ class TenantTrackerApp(ctk.CTk):
         style.configure("Treeview.Heading", background="#565b5e", foreground="white", font=('Segoe UI', 12, 'bold'), relief="flat")
         style.map("Treeview.Heading", background=[('active', '#343638')])
 
-        # Cleaned up Columns
         self.columns = (
             "ID", "Status", "Name", "Address", "Room", "Started", "Term", 
             "Move Out", "Monthly", "Valid ID", "Job", "Messenger", 
-            "Email", "Contact", "Notes", "Agreement", "Advance", "Deposit"
+            "Email", "Contact", "Notes", "Agreement", "Advance", "Deposit", "Last Edited"
         )
         self.tenant_table = ttk.Treeview(self.table_frame, columns=self.columns, show="headings")
         
@@ -209,12 +207,12 @@ class TenantTrackerApp(ctk.CTk):
                 self.after(1500, lambda: self.title(original_title))
 
     def reset_table_columns(self):
-        # Updated widths without the removed columns
         column_widths = {
             "ID": 40, "Status": 80, "Name": 180, "Address": 280, "Room": 60, 
             "Started": 100, "Term": 80, "Move Out": 100, "Monthly": 90, 
             "Valid ID": 130, "Job": 140, "Messenger": 180, "Email": 220, 
-            "Contact": 120, "Notes": 250, "Agreement": 80, "Advance": 80, "Deposit": 80
+            "Contact": 120, "Notes": 250, "Agreement": 80, "Advance": 80, 
+            "Deposit": 80, "Last Edited": 170
         }
         
         for col, width in column_widths.items():
@@ -240,7 +238,6 @@ class TenantTrackerApp(ctk.CTk):
 
     def validate_monthly(self, *args):
         cv = self.monthly_var.get()
-        # Allows digits and up to one decimal point
         filtered = ''.join([c for c in cv if c.isdigit() or c == '.'])
         if filtered.count('.') > 1:
             parts = filtered.split('.')
@@ -318,6 +315,10 @@ class TenantTrackerApp(ctk.CTk):
         data = [self.entries[field].get() for field in self.fields]
         data.append(self.notes_box.get("1.0", "end-1c")) 
         data.extend([self.check_vars[check].get() for check in self.check_vars])
+        
+        # Capture current time
+        current_timestamp = time.strftime('%Y-%m-%d %I:%M %p')
+        data.append(current_timestamp)
 
         conn = sqlite3.connect('tenant_tracker.db')
         cursor = conn.cursor()
@@ -328,7 +329,7 @@ class TenantTrackerApp(ctk.CTk):
                 UPDATE tenants SET
                     status=?, full_name=?, address=?, room_number=?, date_started=?, lease_term=?, move_out_date=?,
                     monthly_due=?, valid_id=?, job=?, messenger_link=?, email=?, contact_number=?, notes=?,
-                    agreement_signed=?, advance_paid=?, deposit_paid=?
+                    agreement_signed=?, advance_paid=?, deposit_paid=?, last_edited=?
                 WHERE id=?
             ''', data)
         else:
@@ -336,8 +337,8 @@ class TenantTrackerApp(ctk.CTk):
                 INSERT INTO tenants (
                     status, full_name, address, room_number, date_started, lease_term, move_out_date,
                     monthly_due, valid_id, job, messenger_link, email, contact_number, notes,
-                    agreement_signed, advance_paid, deposit_paid
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    agreement_signed, advance_paid, deposit_paid, last_edited
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', data)
             
         conn.commit()

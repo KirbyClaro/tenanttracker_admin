@@ -4,7 +4,6 @@ def init_db():
     conn = sqlite3.connect('tenant_tracker.db')
     cursor = conn.cursor()
 
-    # Created without the Emergency, Occupant, and Vehicle columns
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS tenants (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -24,7 +23,8 @@ def init_db():
             notes TEXT,
             agreement_signed INTEGER DEFAULT 0,
             advance_paid INTEGER DEFAULT 0,
-            deposit_paid INTEGER DEFAULT 0
+            deposit_paid INTEGER DEFAULT 0,
+            last_edited TEXT
         )
     ''')
 
