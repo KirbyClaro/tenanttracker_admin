@@ -7,6 +7,8 @@ from datetime import datetime
 import sqlite3
 import os
 import shutil
+import csv
+import zipfile
 from PIL import Image
 from database import init_db
 from tkcalendar import DateEntry
@@ -20,6 +22,9 @@ os.makedirs("uploads", exist_ok=True)
 class TenantTrackerApp(ctk.CTk):
     def __init__(self):
         super().__init__()
+
+        # Load saved settings on launch
+        self.app_settings = self.load_settings()
 
         # Window Setup
         self.title("TenantTracker Admin")
@@ -43,6 +48,20 @@ class TenantTrackerApp(ctk.CTk):
         self.setup_tenant_tab()
         self.setup_financials_tab() 
         self.setup_summary_tab()
+        self.setup_settings_tab()
+
+    def load_settings(self):
+        conn = sqlite3.connect('tenant_tracker.db')
+        cursor = conn.cursor()
+        cursor.execute("SELECT key, value FROM settings")
+        settings = dict(cursor.fetchall())
+        conn.close()
+
+        # Apply Theme on boot
+        theme = settings.get("theme", "System")
+        ctk.set_appearance_mode(theme)
+        ctk.set_default_color_theme("blue")
+        return settings
 
     # ==========================================
     # TAB 1: TENANT MANAGEMENT
@@ -198,7 +217,10 @@ class TenantTrackerApp(ctk.CTk):
         self.edit_btn = ctk.CTkButton(self.action_frame, text="Edit Selected", command=self.load_for_editing, fg_color="#B8860B", hover_color="#8B6508")
         self.edit_btn.pack(side="left", padx=(0, 10))
         self.delete_btn = ctk.CTkButton(self.action_frame, text="Delete Selected", command=self.delete_tenant, fg_color="#8B0000", hover_color="#660000")
-        self.delete_btn.pack(side="left")
+        self.delete_btn.pack(side="left", padx=(0, 10))
+        
+        self.export_tenants_btn = ctk.CTkButton(self.action_frame, text="Export to CSV", command=lambda: self.export_to_csv('tenants'), fg_color="#2b2b2b", hover_color="#565b5e", border_color="#1f538d", border_width=2)
+        self.export_tenants_btn.pack(side="right")
 
         self.load_tenants_from_db()
 
@@ -287,7 +309,10 @@ class TenantTrackerApp(ctk.CTk):
         self.edit_fin_btn = ctk.CTkButton(self.fin_action_frame, text="Edit Selected", command=self.load_fin_for_editing, fg_color="#B8860B", hover_color="#8B6508")
         self.edit_fin_btn.pack(side="left", padx=(0, 10))
         self.delete_fin_btn = ctk.CTkButton(self.fin_action_frame, text="Delete Selected", command=self.delete_fin, fg_color="#8B0000", hover_color="#660000")
-        self.delete_fin_btn.pack(side="left")
+        self.delete_fin_btn.pack(side="left", padx=(0, 10))
+
+        self.export_fin_btn = ctk.CTkButton(self.fin_action_frame, text="Export to CSV", command=lambda: self.export_to_csv('financials'), fg_color="#2b2b2b", hover_color="#565b5e", border_color="#1f538d", border_width=2)
+        self.export_fin_btn.pack(side="right")
 
         self.load_fin_from_db()
 
@@ -295,11 +320,9 @@ class TenantTrackerApp(ctk.CTk):
     # TAB 3: MONTHLY SUMMARY & EXPENSES
     # ==========================================
     def setup_summary_tab(self):
-        # 1. Top Dashboard (Savings Tracker)
         self.dash_frame = ctk.CTkFrame(self.tab_summary, fg_color="transparent")
         self.dash_frame.pack(fill="x", padx=10, pady=10)
         
-        # Month Selector
         self.month_list = [f"{datetime.now().year}-{str(m).zfill(2)}" for m in range(1, 13)]
         self.selected_month = ctk.StringVar(value=datetime.now().strftime('%Y-%m'))
         
@@ -309,7 +332,6 @@ class TenantTrackerApp(ctk.CTk):
         ctk.CTkOptionMenu(self.header_top, values=self.month_list, variable=self.selected_month, command=self.refresh_summary_dashboard).pack(side="right", padx=10)
         ctk.CTkLabel(self.header_top, text="Select Month:").pack(side="right")
 
-        # Stat Cards
         self.cards_frame = ctk.CTkFrame(self.dash_frame, fg_color="transparent")
         self.cards_frame.pack(fill="x")
 
@@ -325,14 +347,11 @@ class TenantTrackerApp(ctk.CTk):
         self.lbl_save_tot = ctk.CTkLabel(self.cards_frame, text="Total Savings (All-Time)\n₱ 0.00", font=("Segoe UI", 18, "bold"), fg_color="#B8860B", corner_radius=8, width=250, height=80)
         self.lbl_save_tot.pack(side="left", padx=10, expand=True)
 
-        # Separator
         ctk.CTkFrame(self.tab_summary, height=2, fg_color="#565b5e").pack(fill="x", padx=10, pady=10)
 
-        # 2. Main Content (Left Form, Right Table)
         self.sum_content = ctk.CTkFrame(self.tab_summary, fg_color="transparent")
         self.sum_content.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
-        # LEFT: Expense Input Form
         self.exp_form_frame = ctk.CTkFrame(self.sum_content, width=350)
         self.exp_form_frame.pack(side="left", fill="y", padx=(0, 10))
 
@@ -365,7 +384,6 @@ class TenantTrackerApp(ctk.CTk):
         self.exp_clear_btn = ctk.CTkButton(self.exp_form_frame, text="Clear Form", command=self.clear_exp_form, fg_color="#565b5e", hover_color="#343638")
         self.exp_clear_btn.pack(pady=5, padx=10, fill="x")
 
-        # RIGHT: Expenses Table
         self.exp_table_frame = ctk.CTkFrame(self.sum_content)
         self.exp_table_frame.pack(side="right", fill="both", expand=True)
 
@@ -385,7 +403,6 @@ class TenantTrackerApp(ctk.CTk):
         self.exp_table.column("Last Edited", width=150, anchor="center")
         self.exp_table.pack(fill="both", expand=True, padx=(10, 0), pady=(10, 0))
 
-        # Expense Actions
         self.exp_action_frame = ctk.CTkFrame(self.exp_table_frame, fg_color="transparent")
         self.exp_action_frame.pack(fill="x", padx=10, pady=(10, 0))
 
@@ -394,23 +411,146 @@ class TenantTrackerApp(ctk.CTk):
         self.exp_edit_btn = ctk.CTkButton(self.exp_action_frame, text="Edit Selected", command=self.load_expense_for_editing, fg_color="#B8860B", hover_color="#8B6508")
         self.exp_edit_btn.pack(side="left", padx=(0, 10))
         self.exp_delete_btn = ctk.CTkButton(self.exp_action_frame, text="Delete Selected", command=self.delete_expense, fg_color="#8B0000", hover_color="#660000")
-        self.exp_delete_btn.pack(side="left")
+        self.exp_delete_btn.pack(side="left", padx=(0, 10))
+
+        self.export_exp_btn = ctk.CTkButton(self.exp_action_frame, text="Export to CSV", command=lambda: self.export_to_csv('expenses'), fg_color="#2b2b2b", hover_color="#565b5e", border_color="#1f538d", border_width=2)
+        self.export_exp_btn.pack(side="right")
 
         self.refresh_summary_dashboard()
 
-    # --- Summary & Expense Functions ---
+    # ==========================================
+    # TAB 4: SETTINGS & BACKUPS (NEW)
+    # ==========================================
+    def setup_settings_tab(self):
+        self.set_header = ctk.CTkFrame(self.tab_settings, fg_color="transparent")
+        self.set_header.pack(fill="x", padx=10, pady=10)
+
+        ctk.CTkLabel(self.set_header, text="System Settings", font=ctk.CTkFont(size=24, weight="bold")).pack(side="left")
+
+        self.set_content = ctk.CTkFrame(self.tab_settings, fg_color="transparent")
+        self.set_content.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # Left Column: Preferences & Appearance
+        self.left_settings = ctk.CTkFrame(self.set_content, width=400)
+        self.left_settings.pack(side="left", fill="y", padx=(0, 10), expand=True)
+
+        ctk.CTkLabel(self.left_settings, text="Preferences", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(15, 15), anchor="w", padx=20)
+        
+        ctk.CTkLabel(self.left_settings, text="UI Theme Appearance").pack(anchor="w", padx=20)
+        self.theme_var = ctk.StringVar(value=self.app_settings.get("theme", "System"))
+        self.theme_menu = ctk.CTkOptionMenu(self.left_settings, values=["System", "Dark", "Light"], variable=self.theme_var, command=self.change_theme)
+        self.theme_menu.pack(anchor="w", padx=20, pady=(0, 20))
+
+        # Email Automations Configuration
+        ctk.CTkLabel(self.left_settings, text="Email Automations (For Reminders)", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(15, 15), anchor="w", padx=20)
+        
+        ctk.CTkLabel(self.left_settings, text="Sender Email Address").pack(anchor="w", padx=20)
+        self.email_entry = ctk.CTkEntry(self.left_settings, width=300)
+        self.email_entry.insert(0, self.app_settings.get("sender_email", ""))
+        self.email_entry.pack(anchor="w", padx=20, pady=(0, 10))
+
+        ctk.CTkLabel(self.left_settings, text="App Password (Not your normal password)").pack(anchor="w", padx=20)
+        self.pass_entry = ctk.CTkEntry(self.left_settings, width=300, show="*")
+        self.pass_entry.insert(0, self.app_settings.get("sender_password", ""))
+        self.pass_entry.pack(anchor="w", padx=20, pady=(0, 20))
+
+        self.save_settings_btn = ctk.CTkButton(self.left_settings, text="Save Email Settings", command=self.save_app_settings, fg_color="green", hover_color="darkgreen")
+        self.save_settings_btn.pack(anchor="w", padx=20, pady=10)
+
+        # Right Column: Data Security
+        self.right_settings = ctk.CTkFrame(self.set_content, width=400)
+        self.right_settings.pack(side="right", fill="both", expand=True)
+
+        ctk.CTkLabel(self.right_settings, text="Data Security & Backups", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(15, 15), anchor="w", padx=20)
+        
+        backup_desc = ctk.CTkLabel(self.right_settings, text="Create a secure, portable ZIP file containing your database and all uploaded ID pictures. Keep this safe!", wraplength=350, justify="left")
+        backup_desc.pack(anchor="w", padx=20, pady=(0, 10))
+
+        self.backup_btn = ctk.CTkButton(self.right_settings, text="💾 Create Full System Backup", command=self.create_backup, fg_color="#B8860B", hover_color="#8B6508", font=ctk.CTkFont(weight="bold"))
+        self.backup_btn.pack(anchor="w", padx=20, pady=10)
+
+    # --- Settings Functions ---
+    def change_theme(self, new_theme):
+        ctk.set_appearance_mode(new_theme)
+        conn = sqlite3.connect('tenant_tracker.db')
+        conn.cursor().execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('theme', ?)", (new_theme,))
+        conn.commit()
+        conn.close()
+
+    def save_app_settings(self):
+        email = self.email_entry.get()
+        password = self.pass_entry.get()
+
+        conn = sqlite3.connect('tenant_tracker.db')
+        cursor = conn.cursor()
+        cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('sender_email', ?)", (email,))
+        cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('sender_password', ?)", (password,))
+        conn.commit()
+        conn.close()
+        
+        messagebox.showinfo("Success", "Email configuration saved securely to database.")
+
+    def create_backup(self):
+        folder = filedialog.askdirectory(title="Select Backup Folder")
+        if not folder: return
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        zip_path = os.path.join(folder, f"TenantTracker_Backup_{timestamp}.zip")
+
+        try:
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as backup_zip:
+                # Add database file
+                if os.path.exists('tenant_tracker.db'):
+                    backup_zip.write('tenant_tracker.db')
+                
+                # Add all uploaded pictures
+                if os.path.exists('uploads'):
+                    for root, dirs, files in os.walk('uploads'):
+                        for file in files:
+                            file_path = os.path.join(root, file)
+                            backup_zip.write(file_path)
+            
+            messagebox.showinfo("Backup Successful!", f"System completely backed up to:\n\n{zip_path}")
+        except Exception as e:
+            messagebox.showerror("Backup Failed", f"An error occurred: {str(e)}")
+
+    def export_to_csv(self, table_name):
+        conn = sqlite3.connect('tenant_tracker.db')
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT * FROM {table_name}")
+        rows = cursor.fetchall()
+        column_names = [description[0] for description in cursor.description]
+        conn.close()
+
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".csv",
+            filetypes=[("CSV Spreadsheet", "*.csv")],
+            title=f"Export {table_name.title()}",
+            initialfile=f"{table_name}_export_{datetime.now().strftime('%Y%m%d')}.csv"
+        )
+
+        if file_path:
+            try:
+                with open(file_path, mode='w', newline='', encoding='utf-8') as file:
+                    writer = csv.writer(file)
+                    writer.writerow(column_names)
+                    writer.writerows(rows)
+                messagebox.showinfo("Export Successful", f"Excel-ready file saved to:\n\n{file_path}")
+            except Exception as e:
+                messagebox.showerror("Export Failed", f"Could not export file: {str(e)}")
+
+    # ==========================================
+    # HELPER AND GLOBAL FUNCTIONS
+    # ==========================================
     def refresh_summary_dashboard(self, *args):
         month_str = self.selected_month.get()
         conn = sqlite3.connect('tenant_tracker.db')
         cursor = conn.cursor()
 
-        # 1. Load Expense Table for Selected Month
         for item in self.exp_table.get_children(): self.exp_table.delete(item)
         cursor.execute("SELECT id, category, amount, due_date, status, last_edited FROM expenses WHERE month_year=?", (month_str,))
-        for row in cursor.fetchall():
-            self.exp_table.insert("", "end", values=row)
+        for row in cursor.fetchall(): self.exp_table.insert("", "end", values=row)
 
-        # 2. Calculate Dashboard Stats
         cursor.execute("SELECT SUM(amount) FROM financials WHERE status='Paid' AND due_date LIKE ?", (f"{month_str}%",))
         mo_income = cursor.fetchone()[0] or 0.0
 
@@ -424,10 +564,8 @@ class TenantTrackerApp(ctk.CTk):
         cursor.execute("SELECT SUM(amount) FROM expenses WHERE status='Paid'")
         total_paid_expenses = cursor.fetchone()[0] or 0.0
         total_savings = total_income - total_paid_expenses
-
         conn.close()
 
-        # 3. Update the UI Cards
         self.lbl_inc.configure(text=f"Monthly Income (Paid)\n₱ {mo_income:,.2f}")
         self.lbl_exp.configure(text=f"Monthly Expenses (Paid)\n₱ {mo_expenses:,.2f}")
         self.lbl_save_mo.configure(text=f"Monthly Savings\n₱ {mo_savings:,.2f}")
@@ -452,24 +590,20 @@ class TenantTrackerApp(ctk.CTk):
 
         conn = sqlite3.connect('tenant_tracker.db')
         cursor = conn.cursor()
-        
         if self.exp_editing_id:
             cursor.execute("UPDATE expenses SET category=?, amount=?, due_date=?, status=?, month_year=?, last_edited=? WHERE id=?", 
                            (cat, amt, date, status, month_str, timestamp, self.exp_editing_id))
         else:
             cursor.execute("INSERT INTO expenses (month_year, category, amount, due_date, status, last_edited) VALUES (?, ?, ?, ?, ?, ?)", 
                            (month_str, cat, amt, date, status, timestamp))
-        
         conn.commit()
         conn.close()
-
         self.clear_exp_form()
         self.refresh_summary_dashboard()
 
     def load_expense_for_editing(self):
         selected = self.exp_table.selection()
         if not selected: return
-        
         vals = self.exp_table.item(selected[0])['values']
         self.exp_editing_id = vals[0]
         self.exp_cat_combo.set(vals[1])
@@ -502,10 +636,6 @@ class TenantTrackerApp(ctk.CTk):
             conn.close()
             self.refresh_summary_dashboard()
 
-
-    # ==========================================
-    # GLOBAL HELPER FUNCTIONS (Used by Tabs 1 & 2)
-    # ==========================================
     def get_active_tenant_names(self):
         conn = sqlite3.connect('tenant_tracker.db')
         cursor = conn.cursor()
@@ -522,7 +652,6 @@ class TenantTrackerApp(ctk.CTk):
             filtered = parts[0] + '.' + ''.join(parts[1:])
         if cv != filtered: str_var.set(filtered)
 
-    # --- Financial Tab Functions ---
     def toggle_fin_form(self):
         if self.fin_form_visible:
             self.fin_form_frame.pack_forget()
@@ -578,13 +707,10 @@ class TenantTrackerApp(ctk.CTk):
     def load_fin_for_editing(self):
         selected = self.fin_table.selection()
         if not selected: return
-        
         vals = self.fin_table.item(selected[0])['values']
         if not self.fin_form_visible: self.toggle_fin_form()
-        
         self.editing_fin_id = vals[0]
         self.fin_save_btn.configure(text="Update Transaction", fg_color="#B8860B", hover_color="#8B6508")
-        
         self.fin_tenant_combo.set(vals[1])
         self.fin_type_combo.set(vals[2])
         self.fin_amount_entry.delete(0, 'end')
@@ -617,7 +743,6 @@ class TenantTrackerApp(ctk.CTk):
         self.load_fin_from_db()
         self.refresh_summary_dashboard() 
 
-    # --- Tenant Tab Functions ---
     def update_clock(self):
         current_time = time.strftime('%I:%M:%S %p | %B %d, %Y')
         self.clock_label.configure(text=current_time)
@@ -806,7 +931,5 @@ class TenantTrackerApp(ctk.CTk):
         conn.close()
 
 if __name__ == "__main__":
-    ctk.set_appearance_mode("System")
-    ctk.set_default_color_theme("blue")
     app = TenantTrackerApp()
     app.mainloop()
