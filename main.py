@@ -48,36 +48,24 @@ class TenantTrackerApp(ctk.CTk):
         self.search_frame = ctk.CTkFrame(self.tab_tenants, fg_color="#2b2b2b")
         self.search_frame.pack(fill="x", padx=10, pady=(0, 10))
 
-        # Status Filter
         self.filter_var = ctk.StringVar(value="Active")
         self.status_filter = ctk.CTkOptionMenu(
-            self.search_frame, 
-            values=["Active", "Archived", "All"], 
-            variable=self.filter_var,
-            command=self.trigger_search,
-            width=120
+            self.search_frame, values=["Active", "Archived", "All"], 
+            variable=self.filter_var, command=self.trigger_search, width=120
         )
         self.status_filter.pack(side="left", padx=10, pady=10)
 
-        # Search Box
         self.search_var = ctk.StringVar()
         self.search_var.trace_add("write", self.trigger_search)
         self.search_entry = ctk.CTkEntry(
-            self.search_frame, 
-            placeholder_text="Search by Name or Room...", 
-            textvariable=self.search_var, 
-            width=300
+            self.search_frame, placeholder_text="Search by Name or Room...", 
+            textvariable=self.search_var, width=300
         )
         self.search_entry.pack(side="left", padx=(0, 10), pady=10)
 
-        # Reset Columns Button
         self.reset_cols_btn = ctk.CTkButton(
-            self.search_frame, 
-            text="Reset Columns", 
-            command=self.reset_table_columns, 
-            width=120, 
-            fg_color="#565b5e", 
-            hover_color="#343638"
+            self.search_frame, text="Reset Columns", command=self.reset_table_columns, 
+            width=120, fg_color="#565b5e", hover_color="#343638"
         )
         self.reset_cols_btn.pack(side="right", padx=10, pady=10)
 
@@ -91,16 +79,16 @@ class TenantTrackerApp(ctk.CTk):
         self.contact_var = ctk.StringVar()
         self.contact_var.trace_add("write", self.validate_contact)
         
-        self.em_contact_var = ctk.StringVar()
-        self.em_contact_var.trace_add("write", self.validate_em_contact)
+        self.monthly_var = ctk.StringVar()
+        self.monthly_var.trace_add("write", self.validate_monthly)
 
         self.entries = {}
         
+        # Cleaned up fields
         self.fields = [
             "Status", "Full Name", "Address", "Room Number", "Date Started",
             "Lease Term", "Move Out Date", "Monthly Due", "Valid ID", "Working/Job",
-            "Messenger Link", "Email", "Contact Number", "Emergency Name",
-            "Emergency Number", "Occupants", "Vehicle Info"
+            "Messenger Link", "Email", "Contact Number"
         ]
 
         for field in self.fields:
@@ -119,8 +107,8 @@ class TenantTrackerApp(ctk.CTk):
                 ent = ctk.CTkEntry(self.form_frame, width=300, textvariable=self.contact_var)
                 ent.pack(padx=10, pady=(0, 5))
                 self.entries[field] = ent
-            elif field == "Emergency Number":
-                ent = ctk.CTkEntry(self.form_frame, width=300, textvariable=self.em_contact_var)
+            elif field == "Monthly Due":
+                ent = ctk.CTkEntry(self.form_frame, width=300, textvariable=self.monthly_var)
                 ent.pack(padx=10, pady=(0, 5))
                 self.entries[field] = ent
             else:
@@ -157,11 +145,11 @@ class TenantTrackerApp(ctk.CTk):
         style.configure("Treeview.Heading", background="#565b5e", foreground="white", font=('Segoe UI', 12, 'bold'), relief="flat")
         style.map("Treeview.Heading", background=[('active', '#343638')])
 
+        # Cleaned up Columns
         self.columns = (
             "ID", "Status", "Name", "Address", "Room", "Started", "Term", 
             "Move Out", "Monthly", "Valid ID", "Job", "Messenger", 
-            "Email", "Contact", "Em. Name", "Em. Contact", "Occupants",
-            "Vehicle", "Notes", "Agreement", "Advance", "Deposit"
+            "Email", "Contact", "Notes", "Agreement", "Advance", "Deposit"
         )
         self.tenant_table = ttk.Treeview(self.table_frame, columns=self.columns, show="headings")
         
@@ -221,18 +209,16 @@ class TenantTrackerApp(ctk.CTk):
                 self.after(1500, lambda: self.title(original_title))
 
     def reset_table_columns(self):
-        # Mapped out precise proportional widths for every single column
+        # Updated widths without the removed columns
         column_widths = {
             "ID": 40, "Status": 80, "Name": 180, "Address": 280, "Room": 60, 
             "Started": 100, "Term": 80, "Move Out": 100, "Monthly": 90, 
             "Valid ID": 130, "Job": 140, "Messenger": 180, "Email": 220, 
-            "Contact": 120, "Em. Name": 180, "Em. Contact": 120, "Occupants": 80,
-            "Vehicle": 150, "Notes": 250, "Agreement": 80, "Advance": 80, "Deposit": 80
+            "Contact": 120, "Notes": 250, "Agreement": 80, "Advance": 80, "Deposit": 80
         }
         
-        # Apply the widths and adjust alignment (left-align text, center-align data/numbers)
         for col, width in column_widths.items():
-            anchor_val = "w" if col in ["Name", "Address", "Messenger", "Email", "Em. Name", "Vehicle", "Notes", "Job", "Valid ID"] else "center"
+            anchor_val = "w" if col in ["Name", "Address", "Messenger", "Email", "Notes", "Job", "Valid ID"] else "center"
             self.tenant_table.column(col, width=width, anchor=anchor_val)
 
     def toggle_form(self):
@@ -252,10 +238,15 @@ class TenantTrackerApp(ctk.CTk):
         no_letters = ''.join(filter(str.isdigit, cv))
         if cv != no_letters: self.contact_var.set(no_letters)
 
-    def validate_em_contact(self, *args):
-        cv = self.em_contact_var.get()
-        no_letters = ''.join(filter(str.isdigit, cv))
-        if cv != no_letters: self.em_contact_var.set(no_letters)
+    def validate_monthly(self, *args):
+        cv = self.monthly_var.get()
+        # Allows digits and up to one decimal point
+        filtered = ''.join([c for c in cv if c.isdigit() or c == '.'])
+        if filtered.count('.') > 1:
+            parts = filtered.split('.')
+            filtered = parts[0] + '.' + ''.join(parts[1:])
+        if cv != filtered: 
+            self.monthly_var.set(filtered)
 
     def trigger_search(self, *args):
         self.load_tenants_from_db()
@@ -288,11 +279,11 @@ class TenantTrackerApp(ctk.CTk):
                 self.entries[field].insert(0, val)
 
         self.notes_box.delete("1.0", "end")
-        self.notes_box.insert("1.0", str(item_values[18]) if item_values[18] != "None" else "")
+        self.notes_box.insert("1.0", str(item_values[14]) if item_values[14] != "None" else "")
 
-        self.check_vars["Agreement Signed"].set(1 if item_values[19] == "Yes" else 0)
-        self.check_vars["Advance Paid"].set(1 if item_values[20] == "Yes" else 0)
-        self.check_vars["Deposit Paid"].set(1 if item_values[21] == "Yes" else 0)
+        self.check_vars["Agreement Signed"].set(1 if item_values[15] == "Yes" else 0)
+        self.check_vars["Advance Paid"].set(1 if item_values[16] == "Yes" else 0)
+        self.check_vars["Deposit Paid"].set(1 if item_values[17] == "Yes" else 0)
 
     def delete_tenant(self):
         selected_item = self.tenant_table.selection()
@@ -336,8 +327,7 @@ class TenantTrackerApp(ctk.CTk):
             cursor.execute('''
                 UPDATE tenants SET
                     status=?, full_name=?, address=?, room_number=?, date_started=?, lease_term=?, move_out_date=?,
-                    monthly_due=?, valid_id=?, job=?, messenger_link=?, email=?, contact_number=?,
-                    emergency_name=?, emergency_number=?, occupants=?, vehicle_info=?, notes=?,
+                    monthly_due=?, valid_id=?, job=?, messenger_link=?, email=?, contact_number=?, notes=?,
                     agreement_signed=?, advance_paid=?, deposit_paid=?
                 WHERE id=?
             ''', data)
@@ -345,10 +335,9 @@ class TenantTrackerApp(ctk.CTk):
             cursor.execute('''
                 INSERT INTO tenants (
                     status, full_name, address, room_number, date_started, lease_term, move_out_date,
-                    monthly_due, valid_id, job, messenger_link, email, contact_number,
-                    emergency_name, emergency_number, occupants, vehicle_info, notes,
+                    monthly_due, valid_id, job, messenger_link, email, contact_number, notes,
                     agreement_signed, advance_paid, deposit_paid
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', data)
             
         conn.commit()
@@ -384,9 +373,9 @@ class TenantTrackerApp(ctk.CTk):
         
         for row in rows:
             formatted_row = list(row)
-            formatted_row[19] = "Yes" if formatted_row[19] == 1 else "No" 
-            formatted_row[20] = "Yes" if formatted_row[20] == 1 else "No" 
-            formatted_row[21] = "Yes" if formatted_row[21] == 1 else "No" 
+            formatted_row[15] = "Yes" if formatted_row[15] == 1 else "No" 
+            formatted_row[16] = "Yes" if formatted_row[16] == 1 else "No" 
+            formatted_row[17] = "Yes" if formatted_row[17] == 1 else "No" 
             
             self.tenant_table.insert("", "end", values=formatted_row)
             
