@@ -82,11 +82,15 @@ class TenantTrackerApp(ctk.CTk):
         self.monthly_var = ctk.StringVar()
         self.monthly_var.trace_add("write", self.validate_monthly)
 
+        self.due_day_var = ctk.StringVar()
+        self.due_day_var.trace_add("write", self.validate_due_day)
+
         self.entries = {}
         
+        # Added "Rent Due Day"
         self.fields = [
             "Status", "Full Name", "Address", "Room Number", "Date Started",
-            "Lease Term", "Move Out Date", "Monthly Due", "Valid ID", "Working/Job",
+            "Lease Term", "Move Out Date", "Monthly Due", "Rent Due Day", "Valid ID", "Working/Job",
             "Messenger Link", "Email", "Contact Number"
         ]
 
@@ -108,6 +112,10 @@ class TenantTrackerApp(ctk.CTk):
                 self.entries[field] = ent
             elif field == "Monthly Due":
                 ent = ctk.CTkEntry(self.form_frame, width=300, textvariable=self.monthly_var)
+                ent.pack(padx=10, pady=(0, 5))
+                self.entries[field] = ent
+            elif field == "Rent Due Day":
+                ent = ctk.CTkEntry(self.form_frame, width=300, textvariable=self.due_day_var, placeholder_text="e.g., 5 or 15")
                 ent.pack(padx=10, pady=(0, 5))
                 self.entries[field] = ent
             else:
@@ -146,7 +154,7 @@ class TenantTrackerApp(ctk.CTk):
 
         self.columns = (
             "ID", "Status", "Name", "Address", "Room", "Started", "Term", 
-            "Move Out", "Monthly", "Valid ID", "Job", "Messenger", 
+            "Move Out", "Monthly", "Due Day", "Valid ID", "Job", "Messenger", 
             "Email", "Contact", "Notes", "Agreement", "Advance", "Deposit", "Last Edited"
         )
         self.tenant_table = ttk.Treeview(self.table_frame, columns=self.columns, show="headings")
@@ -209,7 +217,7 @@ class TenantTrackerApp(ctk.CTk):
     def reset_table_columns(self):
         column_widths = {
             "ID": 40, "Status": 80, "Name": 180, "Address": 280, "Room": 60, 
-            "Started": 100, "Term": 80, "Move Out": 100, "Monthly": 90, 
+            "Started": 100, "Term": 80, "Move Out": 100, "Monthly": 90, "Due Day": 80,
             "Valid ID": 130, "Job": 140, "Messenger": 180, "Email": 220, 
             "Contact": 120, "Notes": 250, "Agreement": 80, "Advance": 80, 
             "Deposit": 80, "Last Edited": 170
@@ -245,6 +253,15 @@ class TenantTrackerApp(ctk.CTk):
         if cv != filtered: 
             self.monthly_var.set(filtered)
 
+    def validate_due_day(self, *args):
+        cv = self.due_day_var.get()
+        no_letters = ''.join(filter(str.isdigit, cv))
+        if no_letters:
+            if int(no_letters) > 31: # Cap it at 31 (days in a month)
+                no_letters = "31"
+        if cv != no_letters: 
+            self.due_day_var.set(no_letters)
+
     def trigger_search(self, *args):
         self.load_tenants_from_db()
 
@@ -276,11 +293,11 @@ class TenantTrackerApp(ctk.CTk):
                 self.entries[field].insert(0, val)
 
         self.notes_box.delete("1.0", "end")
-        self.notes_box.insert("1.0", str(item_values[14]) if item_values[14] != "None" else "")
+        self.notes_box.insert("1.0", str(item_values[15]) if item_values[15] != "None" else "")
 
-        self.check_vars["Agreement Signed"].set(1 if item_values[15] == "Yes" else 0)
-        self.check_vars["Advance Paid"].set(1 if item_values[16] == "Yes" else 0)
-        self.check_vars["Deposit Paid"].set(1 if item_values[17] == "Yes" else 0)
+        self.check_vars["Agreement Signed"].set(1 if item_values[16] == "Yes" else 0)
+        self.check_vars["Advance Paid"].set(1 if item_values[17] == "Yes" else 0)
+        self.check_vars["Deposit Paid"].set(1 if item_values[18] == "Yes" else 0)
 
     def delete_tenant(self):
         selected_item = self.tenant_table.selection()
@@ -316,7 +333,6 @@ class TenantTrackerApp(ctk.CTk):
         data.append(self.notes_box.get("1.0", "end-1c")) 
         data.extend([self.check_vars[check].get() for check in self.check_vars])
         
-        # Capture current time
         current_timestamp = time.strftime('%Y-%m-%d %I:%M %p')
         data.append(current_timestamp)
 
@@ -328,7 +344,7 @@ class TenantTrackerApp(ctk.CTk):
             cursor.execute('''
                 UPDATE tenants SET
                     status=?, full_name=?, address=?, room_number=?, date_started=?, lease_term=?, move_out_date=?,
-                    monthly_due=?, valid_id=?, job=?, messenger_link=?, email=?, contact_number=?, notes=?,
+                    monthly_due=?, rent_due_day=?, valid_id=?, job=?, messenger_link=?, email=?, contact_number=?, notes=?,
                     agreement_signed=?, advance_paid=?, deposit_paid=?, last_edited=?
                 WHERE id=?
             ''', data)
@@ -336,9 +352,9 @@ class TenantTrackerApp(ctk.CTk):
             cursor.execute('''
                 INSERT INTO tenants (
                     status, full_name, address, room_number, date_started, lease_term, move_out_date,
-                    monthly_due, valid_id, job, messenger_link, email, contact_number, notes,
+                    monthly_due, rent_due_day, valid_id, job, messenger_link, email, contact_number, notes,
                     agreement_signed, advance_paid, deposit_paid, last_edited
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', data)
             
         conn.commit()
@@ -374,9 +390,9 @@ class TenantTrackerApp(ctk.CTk):
         
         for row in rows:
             formatted_row = list(row)
-            formatted_row[15] = "Yes" if formatted_row[15] == 1 else "No" 
             formatted_row[16] = "Yes" if formatted_row[16] == 1 else "No" 
             formatted_row[17] = "Yes" if formatted_row[17] == 1 else "No" 
+            formatted_row[18] = "Yes" if formatted_row[18] == 1 else "No" 
             
             self.tenant_table.insert("", "end", values=formatted_row)
             

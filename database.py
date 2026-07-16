@@ -15,6 +15,7 @@ def init_db():
             lease_term TEXT,
             move_out_date TEXT,
             monthly_due REAL,
+            rent_due_day INTEGER,
             valid_id TEXT,
             job TEXT,
             messenger_link TEXT,
