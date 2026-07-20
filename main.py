@@ -241,7 +241,7 @@ class TenantTrackerApp(ctk.CTk):
         self.load_tenants_from_db()
 
     # ==========================================
-    # TAB 2: FINANCIALS (NEW LEDGER SYSTEM)
+    # TAB 2: FINANCIALS (LEDGER SYSTEM)
     # ==========================================
     def setup_financials_tab(self):
         self.fin_header = ctk.CTkFrame(self.tab_financials, fg_color="transparent")
@@ -263,7 +263,8 @@ class TenantTrackerApp(ctk.CTk):
         self.fin_table_frame = ctk.CTkFrame(self.fin_content)
         self.fin_table_frame.pack(fill="both", expand=True)
 
-        self.fin_columns = ("ID", "BEDSPACER", "Due date", "Monthly", "Remarks", "ok")
+        # Removed 'ok' column, added 'Last Edited'
+        self.fin_columns = ("ID", "BEDSPACER", "Due date", "Monthly", "Remarks", "Last Edited")
         self.fin_table = ttk.Treeview(self.fin_table_frame, columns=self.fin_columns, show="headings")
         
         self.fin_scroll_y = ctk.CTkScrollbar(self.fin_table_frame, orientation="vertical", command=self.fin_table.yview)
@@ -274,11 +275,11 @@ class TenantTrackerApp(ctk.CTk):
             self.fin_table.heading(col, text=col)
             
         self.fin_table.column("ID", width=0, stretch=False)
-        self.fin_table.column("BEDSPACER", width=300, anchor="w")
-        self.fin_table.column("Due date", width=150, anchor="center")
-        self.fin_table.column("Monthly", width=150, anchor="center")
-        self.fin_table.column("Remarks", width=300, anchor="w")
-        self.fin_table.column("ok", width=50, anchor="center")
+        self.fin_table.column("BEDSPACER", width=250, anchor="w")
+        self.fin_table.column("Due date", width=120, anchor="center")
+        self.fin_table.column("Monthly", width=120, anchor="center")
+        self.fin_table.column("Remarks", width=250, anchor="w")
+        self.fin_table.column("Last Edited", width=160, anchor="center")
 
         self.fin_table.pack(fill="both", expand=True)
 
@@ -310,13 +311,13 @@ class TenantTrackerApp(ctk.CTk):
             tid, name, due_date, monthly = t
             monthly_val = float(monthly) if monthly else 0.0
             
-            cursor.execute("SELECT remarks, is_ok FROM rent_ledger WHERE tenant_id=? AND month_year=?", (tid, month_str))
+            cursor.execute("SELECT remarks, last_edited FROM rent_ledger WHERE tenant_id=? AND month_year=?", (tid, month_str))
             ledger_entry = cursor.fetchone()
             
             remarks = ledger_entry[0] if ledger_entry else ""
-            is_ok = "✓" if ledger_entry and ledger_entry[1] else ""
+            last_edited = ledger_entry[1] if ledger_entry and ledger_entry[1] else ""
             
-            self.fin_table.insert("", "end", values=(tid, name, due_date, f"{monthly_val:,.2f}", remarks, is_ok))
+            self.fin_table.insert("", "end", values=(tid, name, due_date, f"{monthly_val:,.2f}", remarks, last_edited))
             grand_total += monthly_val
             
         self.total_lbl.configure(text=f"A. TOTAL = ₱ {grand_total:,.2f}")
@@ -326,23 +327,19 @@ class TenantTrackerApp(ctk.CTk):
         item = self.fin_table.selection()[0]
         col = self.fin_table.identify_column(event.x)
         
-        if col == "#5": 
+        if col == "#5": # Column 5 is 'Remarks'
             x, y, w, h = self.fin_table.bbox(item, col)
             entry = ctk.CTkEntry(self.fin_table, width=w, corner_radius=0)
             entry.place(x=x, y=y, width=w, height=h)
             entry.insert(0, self.fin_table.set(item, "Remarks"))
-            entry.bind("<Return>", lambda e: self.save_ledger_entry(item, entry, entry.get(), None))
+            entry.bind("<Return>", lambda e: self.save_ledger_entry(item, entry, entry.get()))
             entry.bind("<FocusOut>", lambda e: entry.destroy())
             entry.focus()
-            
-        elif col == "#6": 
-            current = self.fin_table.set(item, "ok")
-            new_val = 0 if current == "✓" else 1
-            self.save_ledger_entry(item, None, None, new_val)
 
-    def save_ledger_entry(self, item, entry, rem_text, ok_val):
+    def save_ledger_entry(self, item, entry, rem_text):
         tid = self.fin_table.item(item, "values")[0]
         month_str = self.ledger_month.get()
+        timestamp = time.strftime('%Y-%m-%d %I:%M %p')
         
         conn = sqlite3.connect('tenant_tracker.db')
         c = conn.cursor()
@@ -351,13 +348,10 @@ class TenantTrackerApp(ctk.CTk):
         exists = c.fetchone()
         
         if exists:
-            if rem_text is not None: 
-                c.execute("UPDATE rent_ledger SET remarks=? WHERE id=?", (rem_text, exists[0]))
-            if ok_val is not None: 
-                c.execute("UPDATE rent_ledger SET is_ok=? WHERE id=?", (ok_val, exists[0]))
+            c.execute("UPDATE rent_ledger SET remarks=?, last_edited=? WHERE id=?", (rem_text, timestamp, exists[0]))
         else:
-            c.execute("INSERT INTO rent_ledger (tenant_id, month_year, remarks, is_ok) VALUES (?,?,?,?)", 
-                      (tid, month_str, rem_text if rem_text is not None else "", ok_val if ok_val is not None else 0))
+            c.execute("INSERT INTO rent_ledger (tenant_id, month_year, remarks, last_edited) VALUES (?,?,?,?)", 
+                      (tid, month_str, rem_text, timestamp))
         
         conn.commit()
         conn.close()
@@ -611,11 +605,12 @@ class TenantTrackerApp(ctk.CTk):
         cursor.execute("SELECT id, category, amount, due_date, status, last_edited FROM expenses WHERE month_year=?", (month_str,))
         for row in cursor.fetchall(): self.exp_table.insert("", "end", values=row)
 
+        # Updated: Income is added when the word "paid" is typed into the remarks
         cursor.execute('''
             SELECT SUM(t.monthly_due) 
             FROM tenants t
             JOIN rent_ledger r ON t.id = r.tenant_id
-            WHERE r.month_year = ? AND r.is_ok = 1
+            WHERE r.month_year = ? AND LOWER(r.remarks) LIKE '%paid%' AND LOWER(r.remarks) NOT LIKE '%unpaid%'
         ''', (month_str,))
         mo_income = cursor.fetchone()[0] or 0.0
 
@@ -624,11 +619,12 @@ class TenantTrackerApp(ctk.CTk):
         
         mo_savings = mo_income - mo_expenses
 
+        # Total savings calculation
         cursor.execute('''
             SELECT SUM(t.monthly_due) 
             FROM tenants t
             JOIN rent_ledger r ON t.id = r.tenant_id
-            WHERE r.is_ok = 1
+            WHERE LOWER(r.remarks) LIKE '%paid%' AND LOWER(r.remarks) NOT LIKE '%unpaid%'
         ''')
         total_income = cursor.fetchone()[0] or 0.0
         cursor.execute("SELECT SUM(amount) FROM expenses WHERE status='Paid'")
