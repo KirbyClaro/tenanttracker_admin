@@ -254,7 +254,6 @@ class TenantTrackerApp(ctk.CTk):
         self.fin_title = ctk.CTkLabel(self.fin_header, text="Monthly Rental Report", font=ctk.CTkFont(size=24, weight="bold"))
         self.fin_title.pack(side="left")
 
-        # FIX: Forcing explicit strings to prevent the January 01 bug
         current_year = str(datetime.now().year)
         current_month = str(datetime.now().strftime('%m'))
         
@@ -267,11 +266,11 @@ class TenantTrackerApp(ctk.CTk):
 
         self.ledger_year_menu = ctk.CTkOptionMenu(self.fin_header, values=years, variable=self.ledger_year_var, command=self.trigger_ledger_update, width=80)
         self.ledger_year_menu.pack(side="right", padx=(5, 10))
-        self.ledger_year_menu.set(current_year) # Force update UI
+        self.ledger_year_menu.set(current_year) 
 
         self.ledger_month_menu = ctk.CTkOptionMenu(self.fin_header, values=months, variable=self.ledger_month_var, command=self.trigger_ledger_update, width=70)
         self.ledger_month_menu.pack(side="right", padx=(5, 0))
-        self.ledger_month_menu.set(current_month) # Force update UI
+        self.ledger_month_menu.set(current_month) 
         
         ctk.CTkLabel(self.fin_header, text="Select Period:").pack(side="right")
 
@@ -300,12 +299,21 @@ class TenantTrackerApp(ctk.CTk):
 
         self.fin_table.pack(fill="both", expand=True)
 
-        self.fin_table.bind("<Double-1>", self.edit_ledger_cell)
+        # Updated to trigger the safe Popup window instead of a glitchy inline box
+        self.fin_table.bind("<Double-1>", self.open_remarks_popup)
 
         self.total_frame = ctk.CTkFrame(self.fin_content, fg_color="transparent")
         self.total_frame.pack(fill="x", pady=10)
         
-        # EXCEL STYLE MANUAL TOTAL ENTRY
+        # Action Buttons
+        self.export_fin_btn = ctk.CTkButton(self.total_frame, text="Export to CSV", command=lambda: self.export_to_csv('rent_ledger'), fg_color=("#d3d3d3", "#2b2b2b"), hover_color=("#c8c8c8", "#565b5e"), text_color=("black", "white"), border_color="#1f538d", border_width=2)
+        self.export_fin_btn.pack(side="left", padx=10)
+
+        # NEW: Explicit Edit Button so it's impossible to miss!
+        self.edit_remarks_btn = ctk.CTkButton(self.total_frame, text="✏️ Edit Remarks", command=self.open_remarks_popup, fg_color="#B8860B", hover_color="#8B6508", text_color="white", font=ctk.CTkFont(weight="bold"))
+        self.edit_remarks_btn.pack(side="left", padx=10)
+
+        # MANUAL TOTAL ENTRY
         self.total_container = ctk.CTkFrame(self.total_frame, fg_color="transparent")
         self.total_container.pack(side="right", padx=50)
 
@@ -321,14 +329,44 @@ class TenantTrackerApp(ctk.CTk):
         )
         self.total_entry.pack(side="left", padx=5)
         
-        # Save when hitting Enter or clicking away
         self.total_entry.bind("<Return>", self.save_manual_total)
         self.total_entry.bind("<FocusOut>", self.save_manual_total)
 
-        self.export_fin_btn = ctk.CTkButton(self.total_frame, text="Export to CSV", command=lambda: self.export_to_csv('rent_ledger'), fg_color=("#d3d3d3", "#2b2b2b"), hover_color=("#c8c8c8", "#565b5e"), text_color=("black", "white"), border_color="#1f538d", border_width=2)
-        self.export_fin_btn.pack(side="left", padx=10)
-
         self.load_ledger()
+
+    def open_remarks_popup(self, event=None):
+        selected = self.fin_table.selection()
+        if not selected:
+            messagebox.showwarning("Select Tenant", "Please click on a tenant in the list first to edit their remarks.")
+            return
+            
+        item = selected[0]
+        vals = self.fin_table.item(item)['values']
+        tid = vals[0]
+        tenant_name = vals[1]
+        
+        # Safely handle completely empty remarks
+        current_remarks = vals[4] if str(vals[4]) != "None" else ""
+
+        # Create sleek Popup Window
+        dialog = ctk.CTkToplevel(self)
+        dialog.title(f"Edit Remarks")
+        dialog.geometry("400x250")
+        dialog.attributes("-topmost", True)
+        
+        ctk.CTkLabel(dialog, text=f"Remarks for: {tenant_name}", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(20, 10))
+        
+        rem_entry = ctk.CTkTextbox(dialog, width=350, height=100)
+        rem_entry.pack(padx=20, pady=10)
+        
+        if current_remarks:
+            rem_entry.insert("1.0", str(current_remarks))
+            
+        def save():
+            new_rem = rem_entry.get("1.0", "end-1c")
+            self.save_ledger_entry(item, dialog, new_rem)
+            
+        ctk.CTkButton(dialog, text="Save Remarks", command=save, fg_color="green", hover_color="darkgreen", text_color="white").pack(pady=10)
 
     def save_manual_total(self, event=None):
         month_str = self.ledger_month.get()
@@ -340,12 +378,11 @@ class TenantTrackerApp(ctk.CTk):
         conn.commit()
         conn.close()
         
-        # Briefly flash the app title to show it saved successfully
         self.title("TenantTracker Admin - Saved Total!")
         self.after(1500, lambda: self.title("TenantTracker Admin"))
         
         self.refresh_summary_dashboard()
-        self.focus() # Take cursor focus away from the input box
+        self.focus() 
 
     def load_ledger(self, *args):
         for i in self.fin_table.get_children(): self.fin_table.delete(i)
@@ -369,7 +406,6 @@ class TenantTrackerApp(ctk.CTk):
             
             self.fin_table.insert("", "end", values=(tid, name, due_date, f"{monthly_val:,.2f}", remarks, last_edited))
             
-        # Load the saved manual total
         cursor.execute("SELECT value FROM settings WHERE key=?", (f"ledger_total_{month_str}",))
         saved_total = cursor.fetchone()
         
@@ -379,20 +415,7 @@ class TenantTrackerApp(ctk.CTk):
             
         conn.close()
 
-    def edit_ledger_cell(self, event):
-        item = self.fin_table.selection()[0]
-        col = self.fin_table.identify_column(event.x)
-        
-        if col == "#5": # Column 5 is 'Remarks'
-            x, y, w, h = self.fin_table.bbox(item, col)
-            entry = ctk.CTkEntry(self.fin_table, width=w, corner_radius=0)
-            entry.place(x=x, y=y, width=w, height=h)
-            entry.insert(0, self.fin_table.set(item, "Remarks"))
-            entry.bind("<Return>", lambda e: self.save_ledger_entry(item, entry, entry.get()))
-            entry.bind("<FocusOut>", lambda e: entry.destroy())
-            entry.focus()
-
-    def save_ledger_entry(self, item, entry, rem_text):
+    def save_ledger_entry(self, item, dialog_window, rem_text):
         tid = self.fin_table.item(item, "values")[0]
         month_str = self.ledger_month.get()
         timestamp = time.strftime('%Y-%m-%d %I:%M %p')
@@ -412,8 +435,8 @@ class TenantTrackerApp(ctk.CTk):
         conn.commit()
         conn.close()
         
-        if entry: 
-            entry.destroy()
+        if dialog_window: 
+            dialog_window.destroy()
             
         self.load_ledger()
 
@@ -679,7 +702,7 @@ class TenantTrackerApp(ctk.CTk):
         cursor.execute("SELECT id, category, amount, due_date, status, last_edited FROM expenses WHERE month_year=?", (month_str,))
         for row in cursor.fetchall(): self.exp_table.insert("", "end", values=row)
 
-        # GET MANUAL MONTHLY INCOME (Pulls the exact number you typed in the Financials Tab)
+        # GET MANUAL MONTHLY INCOME 
         cursor.execute("SELECT value FROM settings WHERE key=?", (f"ledger_total_{month_str}",))
         saved_total = cursor.fetchone()
         
