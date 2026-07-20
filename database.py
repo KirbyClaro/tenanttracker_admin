@@ -29,7 +29,6 @@ def init_db():
         )
     ''')
 
-    # UPDATED TABLE: Replaced is_ok with last_edited
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS rent_ledger (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -41,15 +40,16 @@ def init_db():
         )
     ''')
 
+    # NEW TABLE: Glorified Excel Rows for Monthly Summary
     cursor.execute('''
-        CREATE TABLE IF NOT EXISTS expenses (
+        CREATE TABLE IF NOT EXISTS summary_rows (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             month_year TEXT,
-            category TEXT,
-            amount REAL,
-            due_date TEXT,
-            status TEXT DEFAULT 'Pending',
-            last_edited TEXT
+            col_category TEXT,
+            col_description TEXT,
+            col_amount TEXT,
+            col_total TEXT,
+            col_remarks TEXT
         )
     ''')
 
