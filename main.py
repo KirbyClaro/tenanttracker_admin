@@ -254,22 +254,24 @@ class TenantTrackerApp(ctk.CTk):
         self.fin_title = ctk.CTkLabel(self.fin_header, text="Monthly Rental Report", font=ctk.CTkFont(size=24, weight="bold"))
         self.fin_title.pack(side="left")
 
-        # SPLIT DROPDOWN DESIGN
-        current_year = datetime.now().year
-        current_month = datetime.now().strftime('%m')
+        # FIX: Forcing explicit strings to prevent the January 01 bug
+        current_year = str(datetime.now().year)
+        current_month = str(datetime.now().strftime('%m'))
         
-        self.ledger_year_var = ctk.StringVar(value=str(current_year))
+        self.ledger_year_var = ctk.StringVar(value=current_year)
         self.ledger_month_var = ctk.StringVar(value=current_month)
         self.ledger_month = ctk.StringVar(value=f"{current_year}-{current_month}")
 
-        years = [str(y) for y in range(current_year - 2, current_year + 5)]
+        years = [str(y) for y in range(int(current_year) - 2, int(current_year) + 5)]
         months = [str(m).zfill(2) for m in range(1, 13)]
 
         self.ledger_year_menu = ctk.CTkOptionMenu(self.fin_header, values=years, variable=self.ledger_year_var, command=self.trigger_ledger_update, width=80)
         self.ledger_year_menu.pack(side="right", padx=(5, 10))
+        self.ledger_year_menu.set(current_year) # Force update UI
 
         self.ledger_month_menu = ctk.CTkOptionMenu(self.fin_header, values=months, variable=self.ledger_month_var, command=self.trigger_ledger_update, width=70)
         self.ledger_month_menu.pack(side="right", padx=(5, 0))
+        self.ledger_month_menu.set(current_month) # Force update UI
         
         ctk.CTkLabel(self.fin_header, text="Select Period:").pack(side="right")
 
@@ -303,13 +305,47 @@ class TenantTrackerApp(ctk.CTk):
         self.total_frame = ctk.CTkFrame(self.fin_content, fg_color="transparent")
         self.total_frame.pack(fill="x", pady=10)
         
-        self.total_lbl = ctk.CTkLabel(self.total_frame, text="A. TOTAL = ₱ 0.00", font=("Segoe UI", 18, "bold"), text_color="#8B0000")
-        self.total_lbl.pack(side="right", padx=50)
+        # EXCEL STYLE MANUAL TOTAL ENTRY
+        self.total_container = ctk.CTkFrame(self.total_frame, fg_color="transparent")
+        self.total_container.pack(side="right", padx=50)
+
+        ctk.CTkLabel(self.total_container, text="A. TOTAL = ₱ ", font=("Segoe UI", 20, "bold"), text_color="#8B0000").pack(side="left")
+
+        self.total_entry = ctk.CTkEntry(
+            self.total_container, 
+            font=("Segoe UI", 20, "bold"), 
+            text_color="#8B0000", 
+            width=180, 
+            justify="center",
+            placeholder_text="Enter Total Here"
+        )
+        self.total_entry.pack(side="left", padx=5)
+        
+        # Save when hitting Enter or clicking away
+        self.total_entry.bind("<Return>", self.save_manual_total)
+        self.total_entry.bind("<FocusOut>", self.save_manual_total)
 
         self.export_fin_btn = ctk.CTkButton(self.total_frame, text="Export to CSV", command=lambda: self.export_to_csv('rent_ledger'), fg_color=("#d3d3d3", "#2b2b2b"), hover_color=("#c8c8c8", "#565b5e"), text_color=("black", "white"), border_color="#1f538d", border_width=2)
         self.export_fin_btn.pack(side="left", padx=10)
 
         self.load_ledger()
+
+    def save_manual_total(self, event=None):
+        month_str = self.ledger_month.get()
+        total_val = self.total_entry.get()
+        
+        conn = sqlite3.connect('tenant_tracker.db')
+        cursor = conn.cursor()
+        cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (f"ledger_total_{month_str}", total_val))
+        conn.commit()
+        conn.close()
+        
+        # Briefly flash the app title to show it saved successfully
+        self.title("TenantTracker Admin - Saved Total!")
+        self.after(1500, lambda: self.title("TenantTracker Admin"))
+        
+        self.refresh_summary_dashboard()
+        self.focus() # Take cursor focus away from the input box
 
     def load_ledger(self, *args):
         for i in self.fin_table.get_children(): self.fin_table.delete(i)
@@ -321,7 +357,6 @@ class TenantTrackerApp(ctk.CTk):
         cursor.execute("SELECT id, full_name, rent_due_date, monthly_due FROM tenants WHERE status='Active'")
         tenants = cursor.fetchall()
         
-        grand_total = 0.0
         for t in tenants:
             tid, name, due_date, monthly = t
             monthly_val = float(monthly) if monthly else 0.0
@@ -333,9 +368,15 @@ class TenantTrackerApp(ctk.CTk):
             last_edited = ledger_entry[1] if ledger_entry and ledger_entry[1] else ""
             
             self.fin_table.insert("", "end", values=(tid, name, due_date, f"{monthly_val:,.2f}", remarks, last_edited))
-            grand_total += monthly_val
             
-        self.total_lbl.configure(text=f"A. TOTAL = ₱ {grand_total:,.2f}")
+        # Load the saved manual total
+        cursor.execute("SELECT value FROM settings WHERE key=?", (f"ledger_total_{month_str}",))
+        saved_total = cursor.fetchone()
+        
+        self.total_entry.delete(0, 'end')
+        if saved_total and saved_total[0]:
+            self.total_entry.insert(0, saved_total[0])
+            
         conn.close()
 
     def edit_ledger_cell(self, event):
@@ -375,7 +416,6 @@ class TenantTrackerApp(ctk.CTk):
             entry.destroy()
             
         self.load_ledger()
-        self.refresh_summary_dashboard()
 
     # ==========================================
     # TAB 3: MONTHLY SUMMARY & EXPENSES
@@ -392,22 +432,23 @@ class TenantTrackerApp(ctk.CTk):
         self.header_top.pack(fill="x", pady=(0, 10))
         ctk.CTkLabel(self.header_top, text="Business Savings Tracker", font=ctk.CTkFont(size=24, weight="bold")).pack(side="left")
 
-        # SPLIT DROPDOWN DESIGN
-        current_year = datetime.now().year
-        current_month = datetime.now().strftime('%m')
+        current_year = str(datetime.now().year)
+        current_month = str(datetime.now().strftime('%m'))
         
-        self.sum_year_var = ctk.StringVar(value=str(current_year))
+        self.sum_year_var = ctk.StringVar(value=current_year)
         self.sum_month_var = ctk.StringVar(value=current_month)
         self.selected_month = ctk.StringVar(value=f"{current_year}-{current_month}")
 
-        years = [str(y) for y in range(current_year - 2, current_year + 5)]
+        years = [str(y) for y in range(int(current_year) - 2, int(current_year) + 5)]
         months = [str(m).zfill(2) for m in range(1, 13)]
 
         self.sum_year_menu = ctk.CTkOptionMenu(self.header_top, values=years, variable=self.sum_year_var, command=self.trigger_summary_update, width=80)
         self.sum_year_menu.pack(side="right", padx=(5, 10))
+        self.sum_year_menu.set(current_year)
 
         self.sum_month_menu = ctk.CTkOptionMenu(self.header_top, values=months, variable=self.sum_month_var, command=self.trigger_summary_update, width=70)
         self.sum_month_menu.pack(side="right", padx=(5, 0))
+        self.sum_month_menu.set(current_month)
         
         ctk.CTkLabel(self.header_top, text="Select Period:").pack(side="right")
 
@@ -638,26 +679,34 @@ class TenantTrackerApp(ctk.CTk):
         cursor.execute("SELECT id, category, amount, due_date, status, last_edited FROM expenses WHERE month_year=?", (month_str,))
         for row in cursor.fetchall(): self.exp_table.insert("", "end", values=row)
 
-        cursor.execute('''
-            SELECT SUM(t.monthly_due) 
-            FROM tenants t
-            JOIN rent_ledger r ON t.id = r.tenant_id
-            WHERE r.month_year = ? AND LOWER(r.remarks) LIKE '%paid%' AND LOWER(r.remarks) NOT LIKE '%unpaid%'
-        ''', (month_str,))
-        mo_income = cursor.fetchone()[0] or 0.0
+        # GET MANUAL MONTHLY INCOME (Pulls the exact number you typed in the Financials Tab)
+        cursor.execute("SELECT value FROM settings WHERE key=?", (f"ledger_total_{month_str}",))
+        saved_total = cursor.fetchone()
+        
+        try:
+            mo_income_str = saved_total[0] if saved_total else "0"
+            clean_str = ''.join([c for c in mo_income_str if c.isdigit() or c == '.'])
+            mo_income = float(clean_str) if clean_str else 0.0
+        except:
+            mo_income = 0.0
 
+        # GET MONTHLY EXPENSES
         cursor.execute("SELECT SUM(amount) FROM expenses WHERE status='Paid' AND month_year=?", (month_str,))
         mo_expenses = cursor.fetchone()[0] or 0.0
         
         mo_savings = mo_income - mo_expenses
 
-        cursor.execute('''
-            SELECT SUM(t.monthly_due) 
-            FROM tenants t
-            JOIN rent_ledger r ON t.id = r.tenant_id
-            WHERE LOWER(r.remarks) LIKE '%paid%' AND LOWER(r.remarks) NOT LIKE '%unpaid%'
-        ''')
-        total_income = cursor.fetchone()[0] or 0.0
+        # CALCULATE TOTAL ALL-TIME INCOME
+        cursor.execute("SELECT value FROM settings WHERE key LIKE 'ledger_total_%'")
+        all_totals = cursor.fetchall()
+        total_income = 0.0
+        for val in all_totals:
+            try:
+                clean_str = ''.join([c for c in val[0] if c.isdigit() or c == '.'])
+                total_income += float(clean_str) if clean_str else 0.0
+            except:
+                pass
+                
         cursor.execute("SELECT SUM(amount) FROM expenses WHERE status='Paid'")
         total_paid_expenses = cursor.fetchone()[0] or 0.0
         total_savings = total_income - total_paid_expenses
