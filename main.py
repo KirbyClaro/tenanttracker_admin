@@ -41,8 +41,6 @@ class TenantTrackerApp(ctk.CTk):
         # States
         self.form_visible = False
         self.editing_tenant_id = None
-        self.fin_form_visible = False
-        self.editing_fin_id = None
         self.exp_editing_id = None
 
         self.setup_tenant_tab()
@@ -239,96 +237,141 @@ class TenantTrackerApp(ctk.CTk):
         self.load_tenants_from_db()
 
     # ==========================================
-    # TAB 2: FINANCIALS 
+    # TAB 2: FINANCIALS (NEW LEDGER SYSTEM)
     # ==========================================
     def setup_financials_tab(self):
         self.fin_header = ctk.CTkFrame(self.tab_financials, fg_color="transparent")
         self.fin_header.pack(fill="x", padx=10, pady=10)
 
-        self.fin_title = ctk.CTkLabel(self.fin_header, text="Financial Tracking", font=ctk.CTkFont(size=24, weight="bold"))
+        self.fin_title = ctk.CTkLabel(self.fin_header, text="Monthly Rental Report", font=ctk.CTkFont(size=24, weight="bold"))
         self.fin_title.pack(side="left")
 
-        self.fin_toggle_btn = ctk.CTkButton(self.fin_header, text="+ Add Transaction", command=self.toggle_fin_form, fg_color="#1f538d", hover_color="#14375e")
-        self.fin_toggle_btn.pack(side="left", padx=20)
+        # Ledger Month Selector
+        self.ledger_month_list = [f"{datetime.now().year}-{str(m).zfill(2)}" for m in range(1, 13)]
+        self.ledger_month = ctk.StringVar(value=datetime.now().strftime('%Y-%m'))
+        
+        self.month_menu = ctk.CTkOptionMenu(self.fin_header, values=self.ledger_month_list, variable=self.ledger_month, command=self.load_ledger)
+        self.month_menu.pack(side="right", padx=10)
+        ctk.CTkLabel(self.fin_header, text="Select Month:").pack(side="right")
 
         self.fin_content = ctk.CTkFrame(self.tab_financials, fg_color="transparent")
-        self.fin_content.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        self.fin_content.pack(fill="both", expand=True, padx=10, pady=10)
 
-        self.fin_form_frame = ctk.CTkFrame(self.fin_content, width=350)
-
-        self.fin_entries = {}
-        
-        lbl_tenant = ctk.CTkLabel(self.fin_form_frame, text="Tenant Name")
-        lbl_tenant.pack(anchor="w", padx=10, pady=(15, 0))
-        self.fin_tenant_combo = ctk.CTkComboBox(self.fin_form_frame, width=300, values=self.get_active_tenant_names())
-        self.fin_tenant_combo.pack(padx=10, pady=(0, 5))
-        self.fin_entries["Tenant Name"] = self.fin_tenant_combo
-
-        lbl_type = ctk.CTkLabel(self.fin_form_frame, text="Transaction Type")
-        lbl_type.pack(anchor="w", padx=10, pady=(5, 0))
-        self.fin_type_combo = ctk.CTkComboBox(self.fin_form_frame, width=300, values=["Rent", "Water", "Electricity", "Internet", "Maintenance", "Deposit", "Other"])
-        self.fin_type_combo.pack(padx=10, pady=(0, 5))
-        self.fin_entries["Type"] = self.fin_type_combo
-
-        self.fin_amount_var = ctk.StringVar()
-        self.fin_amount_var.trace_add("write", lambda *args: self.validate_numeric_var(self.fin_amount_var))
-        lbl_amount = ctk.CTkLabel(self.fin_form_frame, text="Amount Due")
-        lbl_amount.pack(anchor="w", padx=10, pady=(5, 0))
-        self.fin_amount_entry = ctk.CTkEntry(self.fin_form_frame, width=300, textvariable=self.fin_amount_var)
-        self.fin_amount_entry.pack(padx=10, pady=(0, 5))
-        self.fin_entries["Amount"] = self.fin_amount_entry
-
-        lbl_due = ctk.CTkLabel(self.fin_form_frame, text="Due Date")
-        lbl_due.pack(anchor="w", padx=10, pady=(5, 0))
-        self.fin_due_entry = DateEntry(self.fin_form_frame, width=45, font=('Segoe UI', 11), background='#1f538d', foreground='white', borderwidth=0, date_pattern='yyyy-mm-dd')
-        self.fin_due_entry.pack(padx=10, pady=(0, 5), ipady=4)
-        self.fin_entries["Due Date"] = self.fin_due_entry
-
-        lbl_status = ctk.CTkLabel(self.fin_form_frame, text="Status")
-        lbl_status.pack(anchor="w", padx=10, pady=(5, 0))
-        self.fin_status_combo = ctk.CTkComboBox(self.fin_form_frame, width=300, values=["Pending", "Paid", "Overdue"])
-        self.fin_status_combo.pack(padx=10, pady=(0, 15))
-        self.fin_entries["Status"] = self.fin_status_combo
-
-        self.fin_save_btn = ctk.CTkButton(self.fin_form_frame, text="Save Transaction", command=self.save_fin_to_db, fg_color="green", hover_color="darkgreen", text_color="white")
-        self.fin_save_btn.pack(pady=10, padx=10, fill="x")
-
+        # Ledger Table Frame
         self.fin_table_frame = ctk.CTkFrame(self.fin_content)
-        self.fin_table_frame.pack(side="right", fill="both", expand=True)
+        self.fin_table_frame.pack(fill="both", expand=True)
 
-        self.fin_columns = ("ID", "Tenant Name", "Type", "Amount", "Due Date", "Status", "Last Edited")
+        self.fin_columns = ("ID", "BEDSPACER", "Due date", "Monthly", "Remarks", "ok")
         self.fin_table = ttk.Treeview(self.fin_table_frame, columns=self.fin_columns, show="headings")
         
         self.fin_scroll_y = ctk.CTkScrollbar(self.fin_table_frame, orientation="vertical", command=self.fin_table.yview)
-        self.fin_scroll_y.pack(side="right", fill="y", pady=(10, 0))
+        self.fin_scroll_y.pack(side="right", fill="y")
         self.fin_table.configure(yscrollcommand=self.fin_scroll_y.set)
+
+        for col in self.fin_columns:
+            self.fin_table.heading(col, text=col)
+            
+        self.fin_table.column("ID", width=0, stretch=False) # Hidden
+        self.fin_table.column("BEDSPACER", width=300, anchor="w")
+        self.fin_table.column("Due date", width=150, anchor="center")
+        self.fin_table.column("Monthly", width=150, anchor="center")
+        self.fin_table.column("Remarks", width=300, anchor="w")
+        self.fin_table.column("ok", width=50, anchor="center")
+
+        self.fin_table.pack(fill="both", expand=True)
+
+        # Double click to edit Remarks or toggle OK
+        self.fin_table.bind("<Double-1>", self.edit_ledger_cell)
+
+        # Bottom Frame for Totals
+        self.total_frame = ctk.CTkFrame(self.fin_content, fg_color="transparent")
+        self.total_frame.pack(fill="x", pady=10)
         
-        for col in self.fin_columns: self.fin_table.heading(col, text=col)
+        # Exact formatting matching user request image
+        self.total_lbl = ctk.CTkLabel(self.total_frame, text="A. TOTAL = ₱ 0.00", font=("Segoe UI", 18, "bold"), text_color="#8B0000")
+        self.total_lbl.pack(side="right", padx=50)
+
+        self.export_fin_btn = ctk.CTkButton(self.total_frame, text="Export to CSV", command=lambda: self.export_to_csv('rent_ledger'), fg_color=("#d3d3d3", "#2b2b2b"), hover_color=("#c8c8c8", "#565b5e"), text_color=("black", "white"), border_color="#1f538d", border_width=2)
+        self.export_fin_btn.pack(side="left", padx=10)
+
+        self.load_ledger()
+
+    def load_ledger(self, *args):
+        for i in self.fin_table.get_children(): self.fin_table.delete(i)
         
-        self.fin_table.column("ID", width=50, anchor="center")
-        self.fin_table.column("Tenant Name", width=200, anchor="w")
-        self.fin_table.column("Type", width=120, anchor="center")
-        self.fin_table.column("Amount", width=120, anchor="center")
-        self.fin_table.column("Due Date", width=120, anchor="center")
-        self.fin_table.column("Status", width=100, anchor="center")
-        self.fin_table.column("Last Edited", width=160, anchor="center")
+        month_str = self.ledger_month.get()
+        conn = sqlite3.connect('tenant_tracker.db')
+        cursor = conn.cursor()
         
-        self.fin_table.pack(fill="both", expand=True, padx=(10, 0), pady=(10, 0))
+        # Pull core active data automatically
+        cursor.execute("SELECT id, full_name, rent_due_date, monthly_due FROM tenants WHERE status='Active'")
+        tenants = cursor.fetchall()
+        
+        grand_total = 0.0
+        for t in tenants:
+            tid, name, due_date, monthly = t
+            monthly_val = float(monthly) if monthly else 0.0
+            
+            # Pull month-specific remarks and status
+            cursor.execute("SELECT remarks, is_ok FROM rent_ledger WHERE tenant_id=? AND month_year=?", (tid, month_str))
+            ledger_entry = cursor.fetchone()
+            
+            remarks = ledger_entry[0] if ledger_entry else ""
+            is_ok = "✓" if ledger_entry and ledger_entry[1] else ""
+            
+            self.fin_table.insert("", "end", values=(tid, name, due_date, f"{monthly_val:,.2f}", remarks, is_ok))
+            grand_total += monthly_val
+            
+        self.total_lbl.configure(text=f"A. TOTAL = ₱ {grand_total:,.2f}")
+        conn.close()
 
-        self.fin_action_frame = ctk.CTkFrame(self.fin_table_frame, fg_color="transparent")
-        self.fin_action_frame.pack(fill="x", padx=10, pady=(10, 0))
+    def edit_ledger_cell(self, event):
+        item = self.fin_table.selection()[0]
+        col = self.fin_table.identify_column(event.x)
+        
+        # Remarks Column
+        if col == "#5": 
+            x, y, w, h = self.fin_table.bbox(item, col)
+            entry = ctk.CTkEntry(self.fin_table, width=w, corner_radius=0)
+            entry.place(x=x, y=y, width=w, height=h)
+            entry.insert(0, self.fin_table.set(item, "Remarks"))
+            entry.bind("<Return>", lambda e: self.save_ledger_entry(item, entry, entry.get(), None))
+            entry.bind("<FocusOut>", lambda e: entry.destroy())
+            entry.focus()
+            
+        # OK Column Checkmark Toggle
+        elif col == "#6": 
+            current = self.fin_table.set(item, "ok")
+            new_val = 0 if current == "✓" else 1
+            self.save_ledger_entry(item, None, None, new_val)
 
-        self.mark_paid_btn = ctk.CTkButton(self.fin_action_frame, text="Mark as Paid", command=self.mark_fin_paid, fg_color="green", hover_color="darkgreen", text_color="white")
-        self.mark_paid_btn.pack(side="left", padx=(0, 10))
-        self.edit_fin_btn = ctk.CTkButton(self.fin_action_frame, text="Edit Selected", command=self.load_fin_for_editing, fg_color="#B8860B", hover_color="#8B6508", text_color="white")
-        self.edit_fin_btn.pack(side="left", padx=(0, 10))
-        self.delete_fin_btn = ctk.CTkButton(self.fin_action_frame, text="Delete Selected", command=self.delete_fin, fg_color="#8B0000", hover_color="#660000", text_color="white")
-        self.delete_fin_btn.pack(side="left", padx=(0, 10))
-
-        self.export_fin_btn = ctk.CTkButton(self.fin_action_frame, text="Export to CSV", command=lambda: self.export_to_csv('financials'), fg_color=("#d3d3d3", "#2b2b2b"), hover_color=("#c8c8c8", "#565b5e"), text_color=("black", "white"), border_color="#1f538d", border_width=2)
-        self.export_fin_btn.pack(side="right")
-
-        self.load_fin_from_db()
+    def save_ledger_entry(self, item, entry, rem_text, ok_val):
+        tid = self.fin_table.item(item, "values")[0]
+        month_str = self.ledger_month.get()
+        
+        conn = sqlite3.connect('tenant_tracker.db')
+        c = conn.cursor()
+        
+        c.execute("SELECT id FROM rent_ledger WHERE tenant_id=? AND month_year=?", (tid, month_str))
+        exists = c.fetchone()
+        
+        if exists:
+            if rem_text is not None: 
+                c.execute("UPDATE rent_ledger SET remarks=? WHERE id=?", (rem_text, exists[0]))
+            if ok_val is not None: 
+                c.execute("UPDATE rent_ledger SET is_ok=? WHERE id=?", (ok_val, exists[0]))
+        else:
+            c.execute("INSERT INTO rent_ledger (tenant_id, month_year, remarks, is_ok) VALUES (?,?,?,?)", 
+                      (tid, month_str, rem_text if rem_text is not None else "", ok_val if ok_val is not None else 0))
+        
+        conn.commit()
+        conn.close()
+        
+        if entry: 
+            entry.destroy()
+            
+        self.load_ledger()
+        self.refresh_summary_dashboard()
 
     # ==========================================
     # TAB 3: MONTHLY SUMMARY & EXPENSES
@@ -444,7 +487,6 @@ class TenantTrackerApp(ctk.CTk):
         self.set_content = ctk.CTkFrame(self.tab_settings, fg_color="transparent")
         self.set_content.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # LEFT COLUMN
         self.left_settings = ctk.CTkScrollableFrame(self.set_content, width=450)
         self.left_settings.pack(side="left", fill="y", padx=(0, 10), expand=True)
 
@@ -484,7 +526,6 @@ class TenantTrackerApp(ctk.CTk):
         self.save_settings_btn = ctk.CTkButton(self.left_settings, text="Save Email & Automation Settings", command=self.save_app_settings, fg_color="green", hover_color="darkgreen", text_color="white")
         self.save_settings_btn.pack(anchor="w", padx=10, pady=10)
 
-        # RIGHT COLUMN
         self.right_settings = ctk.CTkFrame(self.set_content, width=400)
         self.right_settings.pack(side="right", fill="both", expand=True)
 
@@ -575,7 +616,13 @@ class TenantTrackerApp(ctk.CTk):
         cursor.execute("SELECT id, category, amount, due_date, status, last_edited FROM expenses WHERE month_year=?", (month_str,))
         for row in cursor.fetchall(): self.exp_table.insert("", "end", values=row)
 
-        cursor.execute("SELECT SUM(amount) FROM financials WHERE status='Paid' AND due_date LIKE ?", (f"{month_str}%",))
+        # Updated to check the new 'rent_ledger' to calculate Monthly Income
+        cursor.execute('''
+            SELECT SUM(t.monthly_due) 
+            FROM tenants t
+            JOIN rent_ledger r ON t.id = r.tenant_id
+            WHERE r.month_year = ? AND r.is_ok = 1
+        ''', (month_str,))
         mo_income = cursor.fetchone()[0] or 0.0
 
         cursor.execute("SELECT SUM(amount) FROM expenses WHERE status='Paid' AND month_year=?", (month_str,))
@@ -583,7 +630,13 @@ class TenantTrackerApp(ctk.CTk):
         
         mo_savings = mo_income - mo_expenses
 
-        cursor.execute("SELECT SUM(amount) FROM financials WHERE status='Paid'")
+        # Total savings calculation
+        cursor.execute('''
+            SELECT SUM(t.monthly_due) 
+            FROM tenants t
+            JOIN rent_ledger r ON t.id = r.tenant_id
+            WHERE r.is_ok = 1
+        ''')
         total_income = cursor.fetchone()[0] or 0.0
         cursor.execute("SELECT SUM(amount) FROM expenses WHERE status='Paid'")
         total_paid_expenses = cursor.fetchone()[0] or 0.0
@@ -675,97 +728,6 @@ class TenantTrackerApp(ctk.CTk):
             parts = filtered.split('.')
             filtered = parts[0] + '.' + ''.join(parts[1:])
         if cv != filtered: str_var.set(filtered)
-
-    def toggle_fin_form(self):
-        if self.fin_form_visible:
-            self.fin_form_frame.pack_forget()
-            self.fin_toggle_btn.configure(text="+ Add Transaction", fg_color="#1f538d", hover_color="#14375e")
-            self.fin_form_visible = False
-            if self.editing_fin_id: self.clear_fin_form()
-        else:
-            self.fin_tenant_combo.configure(values=self.get_active_tenant_names())
-            self.fin_form_frame.pack(side="left", fill="y", padx=(0, 10), before=self.fin_table_frame)
-            self.fin_toggle_btn.configure(text="- Close Form", fg_color="#8B0000", hover_color="#660000")
-            self.fin_form_visible = True
-
-    def load_fin_from_db(self):
-        for item in self.fin_table.get_children(): self.fin_table.delete(item)
-        conn = sqlite3.connect('tenant_tracker.db')
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, tenant_name, type, amount, due_date, status, last_edited FROM financials")
-        for row in cursor.fetchall():
-            self.fin_table.insert("", "end", values=row)
-        conn.close()
-
-    def clear_fin_form(self):
-        self.fin_amount_entry.delete(0, 'end')
-        self.fin_due_entry.set_date(time.strftime('%Y-%m-%d'))
-        self.fin_status_combo.set("Pending")
-        self.editing_fin_id = None
-        self.fin_save_btn.configure(text="Save Transaction", fg_color="green", hover_color="darkgreen")
-
-    def save_fin_to_db(self):
-        t_name = self.fin_tenant_combo.get()
-        t_type = self.fin_type_combo.get()
-        t_amount = self.fin_amount_entry.get()
-        t_due = self.fin_due_entry.get()
-        t_status = self.fin_status_combo.get()
-        timestamp = time.strftime('%Y-%m-%d %I:%M %p')
-
-        conn = sqlite3.connect('tenant_tracker.db')
-        cursor = conn.cursor()
-        if self.editing_fin_id:
-            cursor.execute("UPDATE financials SET tenant_name=?, type=?, amount=?, due_date=?, status=?, last_edited=? WHERE id=?", 
-                           (t_name, t_type, t_amount, t_due, t_status, timestamp, self.editing_fin_id))
-        else:
-            cursor.execute("INSERT INTO financials (tenant_name, type, amount, due_date, status, last_edited) VALUES (?, ?, ?, ?, ?, ?)", 
-                           (t_name, t_type, t_amount, t_due, t_status, timestamp))
-        conn.commit()
-        conn.close()
-
-        self.clear_fin_form()
-        self.load_fin_from_db()
-        self.toggle_fin_form()
-        self.refresh_summary_dashboard() 
-
-    def load_fin_for_editing(self):
-        selected = self.fin_table.selection()
-        if not selected: return
-        vals = self.fin_table.item(selected[0])['values']
-        if not self.fin_form_visible: self.toggle_fin_form()
-        self.editing_fin_id = vals[0]
-        self.fin_save_btn.configure(text="Update Transaction", fg_color="#B8860B", hover_color="#8B6508")
-        self.fin_tenant_combo.set(vals[1])
-        self.fin_type_combo.set(vals[2])
-        self.fin_amount_entry.delete(0, 'end')
-        self.fin_amount_entry.insert(0, vals[3])
-        self.fin_due_entry.set_date(vals[4])
-        self.fin_status_combo.set(vals[5])
-
-    def delete_fin(self):
-        selected = self.fin_table.selection()
-        if not selected: return
-        confirm = messagebox.askyesno("Confirm Deletion", "Are you sure you want to delete this transaction?")
-        if confirm:
-            f_id = self.fin_table.item(selected[0])['values'][0]
-            conn = sqlite3.connect('tenant_tracker.db')
-            conn.cursor().execute("DELETE FROM financials WHERE id=?", (f_id,))
-            conn.commit()
-            conn.close()
-            self.load_fin_from_db()
-            self.refresh_summary_dashboard() 
-
-    def mark_fin_paid(self):
-        selected = self.fin_table.selection()
-        if not selected: return
-        f_id = self.fin_table.item(selected[0])['values'][0]
-        timestamp = time.strftime('%Y-%m-%d %I:%M %p')
-        conn = sqlite3.connect('tenant_tracker.db')
-        conn.cursor().execute("UPDATE financials SET status='Paid', last_edited=? WHERE id=?", (timestamp, f_id))
-        conn.commit()
-        conn.close()
-        self.load_fin_from_db()
-        self.refresh_summary_dashboard() 
 
     def update_clock(self):
         current_time = time.strftime('%I:%M:%S %p | %B %d, %Y')

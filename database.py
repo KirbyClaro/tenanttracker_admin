@@ -29,15 +29,15 @@ def init_db():
         )
     ''')
 
+    # NEW TABLE: The automated monthly ledger
     cursor.execute('''
-        CREATE TABLE IF NOT EXISTS financials (
+        CREATE TABLE IF NOT EXISTS rent_ledger (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tenant_name TEXT,
-            type TEXT,
-            amount REAL,
-            due_date TEXT,
-            status TEXT DEFAULT 'Pending',
-            last_edited TEXT
+            tenant_id INTEGER,
+            month_year TEXT,
+            remarks TEXT,
+            is_ok INTEGER DEFAULT 0,
+            FOREIGN KEY(tenant_id) REFERENCES tenants(id)
         )
     ''')
 
