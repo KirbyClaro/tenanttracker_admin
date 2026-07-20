@@ -299,17 +299,15 @@ class TenantTrackerApp(ctk.CTk):
 
         self.fin_table.pack(fill="both", expand=True)
 
-        # Updated to trigger the safe Popup window instead of a glitchy inline box
         self.fin_table.bind("<Double-1>", self.open_remarks_popup)
 
         self.total_frame = ctk.CTkFrame(self.fin_content, fg_color="transparent")
         self.total_frame.pack(fill="x", pady=10)
         
-        # Action Buttons
-        self.export_fin_btn = ctk.CTkButton(self.total_frame, text="Export to CSV", command=lambda: self.export_to_csv('rent_ledger'), fg_color=("#d3d3d3", "#2b2b2b"), hover_color=("#c8c8c8", "#565b5e"), text_color=("black", "white"), border_color="#1f538d", border_width=2)
+        # UPDATED: Button calls the new custom ledger export function
+        self.export_fin_btn = ctk.CTkButton(self.total_frame, text="Export to CSV", command=self.export_ledger_csv, fg_color=("#d3d3d3", "#2b2b2b"), hover_color=("#c8c8c8", "#565b5e"), text_color=("black", "white"), border_color="#1f538d", border_width=2)
         self.export_fin_btn.pack(side="left", padx=10)
 
-        # NEW: Explicit Edit Button so it's impossible to miss!
         self.edit_remarks_btn = ctk.CTkButton(self.total_frame, text="✏️ Edit Remarks", command=self.open_remarks_popup, fg_color="#B8860B", hover_color="#8B6508", text_color="white", font=ctk.CTkFont(weight="bold"))
         self.edit_remarks_btn.pack(side="left", padx=10)
 
@@ -345,10 +343,8 @@ class TenantTrackerApp(ctk.CTk):
         tid = vals[0]
         tenant_name = vals[1]
         
-        # Safely handle completely empty remarks
         current_remarks = vals[4] if str(vals[4]) != "None" else ""
 
-        # Create sleek Popup Window
         dialog = ctk.CTkToplevel(self)
         dialog.title(f"Edit Remarks")
         dialog.geometry("400x250")
@@ -689,6 +685,42 @@ class TenantTrackerApp(ctk.CTk):
                 messagebox.showinfo("Export Successful", f"Excel-ready file saved to:\n\n{file_path}")
             except Exception as e:
                 messagebox.showerror("Export Failed", f"Could not export file: {str(e)}")
+
+    # CUSTOM EXPORT FUNCTION JUST FOR THE LEDGER
+    def export_ledger_csv(self):
+        month_str = self.ledger_month.get()
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".csv", filetypes=[("CSV Spreadsheet", "*.csv")],
+            title="Export Monthly Rental Report",
+            initialfile=f"Monthly_Rental_Report_{month_str}.csv"
+        )
+
+        if not file_path:
+            return
+
+        try:
+            with open(file_path, mode='w', newline='', encoding='utf-8') as file:
+                writer = csv.writer(file)
+                # Write the exact Headers from the screen
+                headers = ["BEDSPACER", "Due Date", "Monthly", "Remarks", "Last Edited"]
+                writer.writerow(headers)
+
+                # Loop through the table and write exactly what you see
+                for item in self.fin_table.get_children():
+                    row_data = self.fin_table.item(item)['values']
+                    writer.writerow(row_data[1:]) # Skips the hidden ID column
+
+                # Add a space, then add the manual Total you typed in!
+                writer.writerow([])
+                
+                total_val = self.total_entry.get()
+                if not total_val:
+                    total_val = "0"
+                writer.writerow(["", "", "A. TOTAL =", f"₱ {total_val}", ""])
+
+            messagebox.showinfo("Export Successful", f"Monthly Rental Report neatly formatted and saved to:\n\n{file_path}")
+        except Exception as e:
+            messagebox.showerror("Export Failed", f"Could not export file: {str(e)}")
 
     # ==========================================
     # HELPER AND GLOBAL FUNCTIONS
