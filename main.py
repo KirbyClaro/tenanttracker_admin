@@ -304,7 +304,6 @@ class TenantTrackerApp(ctk.CTk):
         self.total_frame = ctk.CTkFrame(self.fin_content, fg_color="transparent")
         self.total_frame.pack(fill="x", pady=10)
         
-        # UPDATED: Button calls the new custom ledger export function
         self.export_fin_btn = ctk.CTkButton(self.total_frame, text="Export to CSV", command=self.export_ledger_csv, fg_color=("#d3d3d3", "#2b2b2b"), hover_color=("#c8c8c8", "#565b5e"), text_color=("black", "white"), border_color="#1f538d", border_width=2)
         self.export_fin_btn.pack(side="left", padx=10)
 
@@ -400,7 +399,8 @@ class TenantTrackerApp(ctk.CTk):
             remarks = ledger_entry[0] if ledger_entry else ""
             last_edited = ledger_entry[1] if ledger_entry and ledger_entry[1] else ""
             
-            self.fin_table.insert("", "end", values=(tid, name, due_date, f"{monthly_val:,.2f}", remarks, last_edited))
+            # UPDATED: Added the peso sign "₱" dynamically to the Monthly column
+            self.fin_table.insert("", "end", values=(tid, name, due_date, f"₱ {monthly_val:,.2f}", remarks, last_edited))
             
         cursor.execute("SELECT value FROM settings WHERE key=?", (f"ledger_total_{month_str}",))
         saved_total = cursor.fetchone()
@@ -686,7 +686,6 @@ class TenantTrackerApp(ctk.CTk):
             except Exception as e:
                 messagebox.showerror("Export Failed", f"Could not export file: {str(e)}")
 
-    # CUSTOM EXPORT FUNCTION JUST FOR THE LEDGER
     def export_ledger_csv(self):
         month_str = self.ledger_month.get()
         file_path = filedialog.asksaveasfilename(
@@ -701,16 +700,13 @@ class TenantTrackerApp(ctk.CTk):
         try:
             with open(file_path, mode='w', newline='', encoding='utf-8') as file:
                 writer = csv.writer(file)
-                # Write the exact Headers from the screen
                 headers = ["BEDSPACER", "Due Date", "Monthly", "Remarks", "Last Edited"]
                 writer.writerow(headers)
 
-                # Loop through the table and write exactly what you see
                 for item in self.fin_table.get_children():
                     row_data = self.fin_table.item(item)['values']
-                    writer.writerow(row_data[1:]) # Skips the hidden ID column
+                    writer.writerow(row_data[1:]) 
 
-                # Add a space, then add the manual Total you typed in!
                 writer.writerow([])
                 
                 total_val = self.total_entry.get()
@@ -734,7 +730,6 @@ class TenantTrackerApp(ctk.CTk):
         cursor.execute("SELECT id, category, amount, due_date, status, last_edited FROM expenses WHERE month_year=?", (month_str,))
         for row in cursor.fetchall(): self.exp_table.insert("", "end", values=row)
 
-        # GET MANUAL MONTHLY INCOME 
         cursor.execute("SELECT value FROM settings WHERE key=?", (f"ledger_total_{month_str}",))
         saved_total = cursor.fetchone()
         
@@ -745,13 +740,11 @@ class TenantTrackerApp(ctk.CTk):
         except:
             mo_income = 0.0
 
-        # GET MONTHLY EXPENSES
         cursor.execute("SELECT SUM(amount) FROM expenses WHERE status='Paid' AND month_year=?", (month_str,))
         mo_expenses = cursor.fetchone()[0] or 0.0
         
         mo_savings = mo_income - mo_expenses
 
-        # CALCULATE TOTAL ALL-TIME INCOME
         cursor.execute("SELECT value FROM settings WHERE key LIKE 'ledger_total_%'")
         all_totals = cursor.fetchall()
         total_income = 0.0
