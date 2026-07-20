@@ -250,7 +250,13 @@ class TenantTrackerApp(ctk.CTk):
         self.fin_title = ctk.CTkLabel(self.fin_header, text="Monthly Rental Report", font=ctk.CTkFont(size=24, weight="bold"))
         self.fin_title.pack(side="left")
 
-        self.ledger_month_list = [f"{datetime.now().year}-{str(m).zfill(2)}" for m in range(1, 13)]
+        # Dynamic 3-year rolling month list (Last Year, This Year, Next Year)
+        current_year = datetime.now().year
+        self.ledger_month_list = []
+        for year in [current_year - 1, current_year, current_year + 1]:
+            for m in range(1, 13):
+                self.ledger_month_list.append(f"{year}-{str(m).zfill(2)}")
+                
         self.ledger_month = ctk.StringVar(value=datetime.now().strftime('%Y-%m'))
         
         self.month_menu = ctk.CTkOptionMenu(self.fin_header, values=self.ledger_month_list, variable=self.ledger_month, command=self.load_ledger)
@@ -263,7 +269,6 @@ class TenantTrackerApp(ctk.CTk):
         self.fin_table_frame = ctk.CTkFrame(self.fin_content)
         self.fin_table_frame.pack(fill="both", expand=True)
 
-        # Removed 'ok' column, added 'Last Edited'
         self.fin_columns = ("ID", "BEDSPACER", "Due date", "Monthly", "Remarks", "Last Edited")
         self.fin_table = ttk.Treeview(self.fin_table_frame, columns=self.fin_columns, show="headings")
         
@@ -369,7 +374,13 @@ class TenantTrackerApp(ctk.CTk):
         self.dash_frame = ctk.CTkFrame(self.tab_summary, fg_color="transparent")
         self.dash_frame.pack(fill="x", padx=10, pady=10)
         
-        self.month_list = [f"{datetime.now().year}-{str(m).zfill(2)}" for m in range(1, 13)]
+        # Dynamic 3-year rolling month list (Last Year, This Year, Next Year)
+        current_year = datetime.now().year
+        self.month_list = []
+        for year in [current_year - 1, current_year, current_year + 1]:
+            for m in range(1, 13):
+                self.month_list.append(f"{year}-{str(m).zfill(2)}")
+                
         self.selected_month = ctk.StringVar(value=datetime.now().strftime('%Y-%m'))
         
         self.header_top = ctk.CTkFrame(self.dash_frame, fg_color="transparent")
@@ -605,7 +616,6 @@ class TenantTrackerApp(ctk.CTk):
         cursor.execute("SELECT id, category, amount, due_date, status, last_edited FROM expenses WHERE month_year=?", (month_str,))
         for row in cursor.fetchall(): self.exp_table.insert("", "end", values=row)
 
-        # Updated: Income is added when the word "paid" is typed into the remarks
         cursor.execute('''
             SELECT SUM(t.monthly_due) 
             FROM tenants t
@@ -619,7 +629,6 @@ class TenantTrackerApp(ctk.CTk):
         
         mo_savings = mo_income - mo_expenses
 
-        # Total savings calculation
         cursor.execute('''
             SELECT SUM(t.monthly_due) 
             FROM tenants t
