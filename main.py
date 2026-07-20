@@ -60,14 +60,12 @@ class TenantTrackerApp(ctk.CTk):
         settings = dict(cursor.fetchall())
         conn.close()
 
-        # Apply Theme on boot
         theme = settings.get("theme", "System")
         ctk.set_appearance_mode(theme)
         ctk.set_default_color_theme("blue")
         return settings
 
     def apply_table_theme(self):
-        """Dynamically updates standard ttk widgets based on the current theme"""
         mode = ctk.get_appearance_mode()
         style = ttk.Style()
         style.theme_use("default")
@@ -142,13 +140,11 @@ class TenantTrackerApp(ctk.CTk):
         self.contact_var.trace_add("write", self.validate_contact)
         self.monthly_var = ctk.StringVar()
         self.monthly_var.trace_add("write", lambda *args: self.validate_numeric_var(self.monthly_var))
-        self.due_day_var = ctk.StringVar()
-        self.due_day_var.trace_add("write", self.validate_due_day)
 
         self.entries = {}
         self.fields = [
             "Status", "Full Name", "Address", "Room Number", "Date Started",
-            "Lease Term", "Move Out Date", "Monthly Due", "Rent Due Day", "Valid ID", "Working/Job",
+            "Lease Term", "Move Out Date", "Monthly Due", "Rent Due Date", "Valid ID", "Working/Job",
             "Messenger Link", "Email", "Contact Number"
         ]
 
@@ -156,7 +152,7 @@ class TenantTrackerApp(ctk.CTk):
             lbl = ctk.CTkLabel(self.form_frame, text=field)
             lbl.pack(anchor="w", padx=10, pady=(5, 0))
 
-            if field in ["Date Started", "Move Out Date"]:
+            if field in ["Date Started", "Move Out Date", "Rent Due Date"]:
                 ent = DateEntry(self.form_frame, width=45, font=('Segoe UI', 11), background='#1f538d', foreground='white', borderwidth=0, date_pattern='yyyy-mm-dd')
                 ent.pack(padx=10, pady=(0, 5), ipady=4)
                 self.entries[field] = ent
@@ -170,10 +166,6 @@ class TenantTrackerApp(ctk.CTk):
                 self.entries[field] = ent
             elif field == "Monthly Due":
                 ent = ctk.CTkEntry(self.form_frame, width=300, textvariable=self.monthly_var)
-                ent.pack(padx=10, pady=(0, 5))
-                self.entries[field] = ent
-            elif field == "Rent Due Day":
-                ent = ctk.CTkEntry(self.form_frame, width=300, textvariable=self.due_day_var, placeholder_text="e.g., 5 or 15")
                 ent.pack(padx=10, pady=(0, 5))
                 self.entries[field] = ent
             elif field == "Valid ID":
@@ -212,7 +204,7 @@ class TenantTrackerApp(ctk.CTk):
 
         self.columns = (
             "ID", "Status", "Name", "Address", "Room", "Started", "Term", 
-            "Move Out", "Monthly", "Due Day", "Valid ID", "Job", "Messenger", 
+            "Move Out", "Monthly", "Due Date", "Valid ID", "Job", "Messenger", 
             "Email", "Contact", "Notes", "Agreement", "Advance", "Deposit", "Last Edited"
         )
         self.tenant_table = ttk.Treeview(self.table_frame, columns=self.columns, show="headings")
@@ -452,7 +444,7 @@ class TenantTrackerApp(ctk.CTk):
         self.set_content = ctk.CTkFrame(self.tab_settings, fg_color="transparent")
         self.set_content.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # LEFT COLUMN (Now Scrollable for more space)
+        # LEFT COLUMN
         self.left_settings = ctk.CTkScrollableFrame(self.set_content, width=450)
         self.left_settings.pack(side="left", fill="y", padx=(0, 10), expand=True)
 
@@ -788,12 +780,6 @@ class TenantTrackerApp(ctk.CTk):
         no_letters = ''.join(filter(str.isdigit, cv))
         if cv != no_letters: self.contact_var.set(no_letters)
 
-    def validate_due_day(self, *args):
-        cv = self.due_day_var.get()
-        no_letters = ''.join(filter(str.isdigit, cv))
-        if no_letters and int(no_letters) > 31: no_letters = "31"
-        if cv != no_letters: self.due_day_var.set(no_letters)
-
     def upload_id_image(self):
         file_path = filedialog.askopenfilename(title="Select ID Image", filetypes=[("Image Files", "*.png;*.jpg;*.jpeg")])
         if file_path:
@@ -863,7 +849,7 @@ class TenantTrackerApp(ctk.CTk):
                 self.after(1500, lambda: self.title("TenantTracker Admin"))
 
     def reset_table_columns(self):
-        widths = {"ID": 40, "Status": 80, "Name": 180, "Address": 280, "Room": 60, "Started": 100, "Term": 80, "Move Out": 100, "Monthly": 90, "Due Day": 80, "Valid ID": 130, "Job": 140, "Messenger": 180, "Email": 220, "Contact": 120, "Notes": 250, "Agreement": 80, "Advance": 80, "Deposit": 80, "Last Edited": 170}
+        widths = {"ID": 40, "Status": 80, "Name": 180, "Address": 280, "Room": 60, "Started": 100, "Term": 80, "Move Out": 100, "Monthly": 90, "Due Date": 100, "Valid ID": 130, "Job": 140, "Messenger": 180, "Email": 220, "Contact": 120, "Notes": 250, "Agreement": 80, "Advance": 80, "Deposit": 80, "Last Edited": 170}
         for col, w in widths.items():
             self.tenant_table.column(col, width=w, anchor="w" if col in ["Name", "Address", "Messenger", "Email", "Notes", "Job", "Valid ID"] else "center")
 
@@ -888,7 +874,7 @@ class TenantTrackerApp(ctk.CTk):
         
         for idx, field in enumerate(self.fields):
             v = str(vals[idx + 1]) if vals[idx + 1] != "None" else ""
-            if field in ["Date Started", "Move Out Date"]: self.entries[field].set_date(v)
+            if field in ["Date Started", "Move Out Date", "Rent Due Date"]: self.entries[field].set_date(v)
             elif field == "Status": self.entries[field].set(v)
             elif field == "Valid ID":
                 self.entries[field].configure(state="normal")
@@ -917,7 +903,7 @@ class TenantTrackerApp(ctk.CTk):
 
     def clear_form(self):
         for f, e in self.entries.items():
-            if f in ["Date Started", "Move Out Date"]: e.set_date(time.strftime('%Y-%m-%d'))
+            if f in ["Date Started", "Move Out Date", "Rent Due Date"]: e.set_date(time.strftime('%Y-%m-%d'))
             elif f == "Status": e.set("Active")
             elif f == "Valid ID":
                 e.configure(state="normal")
@@ -938,9 +924,9 @@ class TenantTrackerApp(ctk.CTk):
         conn = sqlite3.connect('tenant_tracker.db')
         if self.editing_tenant_id:
             data.append(self.editing_tenant_id)
-            conn.cursor().execute('''UPDATE tenants SET status=?, full_name=?, address=?, room_number=?, date_started=?, lease_term=?, move_out_date=?, monthly_due=?, rent_due_day=?, valid_id=?, job=?, messenger_link=?, email=?, contact_number=?, notes=?, agreement_signed=?, advance_paid=?, deposit_paid=?, last_edited=? WHERE id=?''', data)
+            conn.cursor().execute('''UPDATE tenants SET status=?, full_name=?, address=?, room_number=?, date_started=?, lease_term=?, move_out_date=?, monthly_due=?, rent_due_date=?, valid_id=?, job=?, messenger_link=?, email=?, contact_number=?, notes=?, agreement_signed=?, advance_paid=?, deposit_paid=?, last_edited=? WHERE id=?''', data)
         else:
-            conn.cursor().execute('''INSERT INTO tenants (status, full_name, address, room_number, date_started, lease_term, move_out_date, monthly_due, rent_due_day, valid_id, job, messenger_link, email, contact_number, notes, agreement_signed, advance_paid, deposit_paid, last_edited) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', data)
+            conn.cursor().execute('''INSERT INTO tenants (status, full_name, address, room_number, date_started, lease_term, move_out_date, monthly_due, rent_due_date, valid_id, job, messenger_link, email, contact_number, notes, agreement_signed, advance_paid, deposit_paid, last_edited) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', data)
         conn.commit()
         conn.close()
         self.clear_form()
