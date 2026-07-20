@@ -243,6 +243,10 @@ class TenantTrackerApp(ctk.CTk):
     # ==========================================
     # TAB 2: FINANCIALS (LEDGER SYSTEM)
     # ==========================================
+    def trigger_ledger_update(self, *args):
+        self.ledger_month.set(f"{self.ledger_year_var.get()}-{self.ledger_month_var.get()}")
+        self.load_ledger()
+
     def setup_financials_tab(self):
         self.fin_header = ctk.CTkFrame(self.tab_financials, fg_color="transparent")
         self.fin_header.pack(fill="x", padx=10, pady=10)
@@ -250,18 +254,24 @@ class TenantTrackerApp(ctk.CTk):
         self.fin_title = ctk.CTkLabel(self.fin_header, text="Monthly Rental Report", font=ctk.CTkFont(size=24, weight="bold"))
         self.fin_title.pack(side="left")
 
-        # Dynamic 3-year rolling month list (Last Year, This Year, Next Year)
+        # SPLIT DROPDOWN DESIGN
         current_year = datetime.now().year
-        self.ledger_month_list = []
-        for year in [current_year - 1, current_year, current_year + 1]:
-            for m in range(1, 13):
-                self.ledger_month_list.append(f"{year}-{str(m).zfill(2)}")
-                
-        self.ledger_month = ctk.StringVar(value=datetime.now().strftime('%Y-%m'))
+        current_month = datetime.now().strftime('%m')
         
-        self.month_menu = ctk.CTkOptionMenu(self.fin_header, values=self.ledger_month_list, variable=self.ledger_month, command=self.load_ledger)
-        self.month_menu.pack(side="right", padx=10)
-        ctk.CTkLabel(self.fin_header, text="Select Month:").pack(side="right")
+        self.ledger_year_var = ctk.StringVar(value=str(current_year))
+        self.ledger_month_var = ctk.StringVar(value=current_month)
+        self.ledger_month = ctk.StringVar(value=f"{current_year}-{current_month}")
+
+        years = [str(y) for y in range(current_year - 2, current_year + 5)]
+        months = [str(m).zfill(2) for m in range(1, 13)]
+
+        self.ledger_year_menu = ctk.CTkOptionMenu(self.fin_header, values=years, variable=self.ledger_year_var, command=self.trigger_ledger_update, width=80)
+        self.ledger_year_menu.pack(side="right", padx=(5, 10))
+
+        self.ledger_month_menu = ctk.CTkOptionMenu(self.fin_header, values=months, variable=self.ledger_month_var, command=self.trigger_ledger_update, width=70)
+        self.ledger_month_menu.pack(side="right", padx=(5, 0))
+        
+        ctk.CTkLabel(self.fin_header, text="Select Period:").pack(side="right")
 
         self.fin_content = ctk.CTkFrame(self.tab_financials, fg_color="transparent")
         self.fin_content.pack(fill="both", expand=True, padx=10, pady=10)
@@ -370,24 +380,36 @@ class TenantTrackerApp(ctk.CTk):
     # ==========================================
     # TAB 3: MONTHLY SUMMARY & EXPENSES
     # ==========================================
+    def trigger_summary_update(self, *args):
+        self.selected_month.set(f"{self.sum_year_var.get()}-{self.sum_month_var.get()}")
+        self.refresh_summary_dashboard()
+
     def setup_summary_tab(self):
         self.dash_frame = ctk.CTkFrame(self.tab_summary, fg_color="transparent")
         self.dash_frame.pack(fill="x", padx=10, pady=10)
         
-        # Dynamic 3-year rolling month list (Last Year, This Year, Next Year)
-        current_year = datetime.now().year
-        self.month_list = []
-        for year in [current_year - 1, current_year, current_year + 1]:
-            for m in range(1, 13):
-                self.month_list.append(f"{year}-{str(m).zfill(2)}")
-                
-        self.selected_month = ctk.StringVar(value=datetime.now().strftime('%Y-%m'))
-        
         self.header_top = ctk.CTkFrame(self.dash_frame, fg_color="transparent")
         self.header_top.pack(fill="x", pady=(0, 10))
         ctk.CTkLabel(self.header_top, text="Business Savings Tracker", font=ctk.CTkFont(size=24, weight="bold")).pack(side="left")
-        ctk.CTkOptionMenu(self.header_top, values=self.month_list, variable=self.selected_month, command=self.refresh_summary_dashboard).pack(side="right", padx=10)
-        ctk.CTkLabel(self.header_top, text="Select Month:").pack(side="right")
+
+        # SPLIT DROPDOWN DESIGN
+        current_year = datetime.now().year
+        current_month = datetime.now().strftime('%m')
+        
+        self.sum_year_var = ctk.StringVar(value=str(current_year))
+        self.sum_month_var = ctk.StringVar(value=current_month)
+        self.selected_month = ctk.StringVar(value=f"{current_year}-{current_month}")
+
+        years = [str(y) for y in range(current_year - 2, current_year + 5)]
+        months = [str(m).zfill(2) for m in range(1, 13)]
+
+        self.sum_year_menu = ctk.CTkOptionMenu(self.header_top, values=years, variable=self.sum_year_var, command=self.trigger_summary_update, width=80)
+        self.sum_year_menu.pack(side="right", padx=(5, 10))
+
+        self.sum_month_menu = ctk.CTkOptionMenu(self.header_top, values=months, variable=self.sum_month_var, command=self.trigger_summary_update, width=70)
+        self.sum_month_menu.pack(side="right", padx=(5, 0))
+        
+        ctk.CTkLabel(self.header_top, text="Select Period:").pack(side="right")
 
         self.cards_frame = ctk.CTkFrame(self.dash_frame, fg_color="transparent")
         self.cards_frame.pack(fill="x")
