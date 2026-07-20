@@ -150,9 +150,13 @@ class TenantTrackerApp(ctk.CTk):
             lbl = ctk.CTkLabel(self.form_frame, text=field)
             lbl.pack(anchor="w", padx=10, pady=(5, 0))
 
-            if field in ["Date Started", "Move Out Date", "Rent Due Date"]:
+            if field in ["Date Started", "Move Out Date"]:
                 ent = DateEntry(self.form_frame, width=45, font=('Segoe UI', 11), background='#1f538d', foreground='white', borderwidth=0, date_pattern='yyyy-mm-dd')
                 ent.pack(padx=10, pady=(0, 5), ipady=4)
+                self.entries[field] = ent
+            elif field == "Rent Due Date":
+                ent = ctk.CTkEntry(self.form_frame, width=300, placeholder_text="e.g., 5 or 21 w/ int.")
+                ent.pack(padx=10, pady=(0, 5))
                 self.entries[field] = ent
             elif field == "Status":
                 ent = ctk.CTkOptionMenu(self.form_frame, values=["Active", "Archived"], width=300)
@@ -246,7 +250,6 @@ class TenantTrackerApp(ctk.CTk):
         self.fin_title = ctk.CTkLabel(self.fin_header, text="Monthly Rental Report", font=ctk.CTkFont(size=24, weight="bold"))
         self.fin_title.pack(side="left")
 
-        # Ledger Month Selector
         self.ledger_month_list = [f"{datetime.now().year}-{str(m).zfill(2)}" for m in range(1, 13)]
         self.ledger_month = ctk.StringVar(value=datetime.now().strftime('%Y-%m'))
         
@@ -257,7 +260,6 @@ class TenantTrackerApp(ctk.CTk):
         self.fin_content = ctk.CTkFrame(self.tab_financials, fg_color="transparent")
         self.fin_content.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # Ledger Table Frame
         self.fin_table_frame = ctk.CTkFrame(self.fin_content)
         self.fin_table_frame.pack(fill="both", expand=True)
 
@@ -271,7 +273,7 @@ class TenantTrackerApp(ctk.CTk):
         for col in self.fin_columns:
             self.fin_table.heading(col, text=col)
             
-        self.fin_table.column("ID", width=0, stretch=False) # Hidden
+        self.fin_table.column("ID", width=0, stretch=False)
         self.fin_table.column("BEDSPACER", width=300, anchor="w")
         self.fin_table.column("Due date", width=150, anchor="center")
         self.fin_table.column("Monthly", width=150, anchor="center")
@@ -280,14 +282,11 @@ class TenantTrackerApp(ctk.CTk):
 
         self.fin_table.pack(fill="both", expand=True)
 
-        # Double click to edit Remarks or toggle OK
         self.fin_table.bind("<Double-1>", self.edit_ledger_cell)
 
-        # Bottom Frame for Totals
         self.total_frame = ctk.CTkFrame(self.fin_content, fg_color="transparent")
         self.total_frame.pack(fill="x", pady=10)
         
-        # Exact formatting matching user request image
         self.total_lbl = ctk.CTkLabel(self.total_frame, text="A. TOTAL = ₱ 0.00", font=("Segoe UI", 18, "bold"), text_color="#8B0000")
         self.total_lbl.pack(side="right", padx=50)
 
@@ -303,7 +302,6 @@ class TenantTrackerApp(ctk.CTk):
         conn = sqlite3.connect('tenant_tracker.db')
         cursor = conn.cursor()
         
-        # Pull core active data automatically
         cursor.execute("SELECT id, full_name, rent_due_date, monthly_due FROM tenants WHERE status='Active'")
         tenants = cursor.fetchall()
         
@@ -312,7 +310,6 @@ class TenantTrackerApp(ctk.CTk):
             tid, name, due_date, monthly = t
             monthly_val = float(monthly) if monthly else 0.0
             
-            # Pull month-specific remarks and status
             cursor.execute("SELECT remarks, is_ok FROM rent_ledger WHERE tenant_id=? AND month_year=?", (tid, month_str))
             ledger_entry = cursor.fetchone()
             
@@ -329,7 +326,6 @@ class TenantTrackerApp(ctk.CTk):
         item = self.fin_table.selection()[0]
         col = self.fin_table.identify_column(event.x)
         
-        # Remarks Column
         if col == "#5": 
             x, y, w, h = self.fin_table.bbox(item, col)
             entry = ctk.CTkEntry(self.fin_table, width=w, corner_radius=0)
@@ -339,7 +335,6 @@ class TenantTrackerApp(ctk.CTk):
             entry.bind("<FocusOut>", lambda e: entry.destroy())
             entry.focus()
             
-        # OK Column Checkmark Toggle
         elif col == "#6": 
             current = self.fin_table.set(item, "ok")
             new_val = 0 if current == "✓" else 1
@@ -616,7 +611,6 @@ class TenantTrackerApp(ctk.CTk):
         cursor.execute("SELECT id, category, amount, due_date, status, last_edited FROM expenses WHERE month_year=?", (month_str,))
         for row in cursor.fetchall(): self.exp_table.insert("", "end", values=row)
 
-        # Updated to check the new 'rent_ledger' to calculate Monthly Income
         cursor.execute('''
             SELECT SUM(t.monthly_due) 
             FROM tenants t
@@ -630,7 +624,6 @@ class TenantTrackerApp(ctk.CTk):
         
         mo_savings = mo_income - mo_expenses
 
-        # Total savings calculation
         cursor.execute('''
             SELECT SUM(t.monthly_due) 
             FROM tenants t
@@ -836,7 +829,7 @@ class TenantTrackerApp(ctk.CTk):
         
         for idx, field in enumerate(self.fields):
             v = str(vals[idx + 1]) if vals[idx + 1] != "None" else ""
-            if field in ["Date Started", "Move Out Date", "Rent Due Date"]: self.entries[field].set_date(v)
+            if field in ["Date Started", "Move Out Date"]: self.entries[field].set_date(v)
             elif field == "Status": self.entries[field].set(v)
             elif field == "Valid ID":
                 self.entries[field].configure(state="normal")
@@ -865,7 +858,7 @@ class TenantTrackerApp(ctk.CTk):
 
     def clear_form(self):
         for f, e in self.entries.items():
-            if f in ["Date Started", "Move Out Date", "Rent Due Date"]: e.set_date(time.strftime('%Y-%m-%d'))
+            if f in ["Date Started", "Move Out Date"]: e.set_date(time.strftime('%Y-%m-%d'))
             elif f == "Status": e.set("Active")
             elif f == "Valid ID":
                 e.configure(state="normal")
