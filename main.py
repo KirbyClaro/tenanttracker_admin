@@ -100,7 +100,7 @@ class TenantTrackerApp(ctk.CTk):
         style.map("Treeview.Heading", background=[('active', head_active)])
 
     # ==========================================
-    # ROBUST NUMBER PARSING (PREVENTS CRASHES)
+    # ROBUST NUMBER PARSING
     # ==========================================
     def safe_float(self, value):
         """Strips out letters, spaces, and currency symbols so the app never crashes on bad input."""
@@ -162,6 +162,8 @@ class TenantTrackerApp(ctk.CTk):
 
         self.contact_var = ctk.StringVar()
         self.contact_var.trace_add("write", self.validate_contact)
+        self.monthly_var = ctk.StringVar()
+        self.monthly_var.trace_add("write", lambda *args: self.validate_numeric_var(self.monthly_var))
 
         self.entries = {}
         self.fields = [
@@ -188,6 +190,10 @@ class TenantTrackerApp(ctk.CTk):
                 self.entries[field] = ent
             elif field == "Contact Number":
                 ent = ctk.CTkEntry(self.form_frame, width=300, textvariable=self.contact_var)
+                ent.pack(padx=10, pady=(0, 5))
+                self.entries[field] = ent
+            elif field == "Monthly Due":
+                ent = ctk.CTkEntry(self.form_frame, width=300, textvariable=self.monthly_var)
                 ent.pack(padx=10, pady=(0, 5))
                 self.entries[field] = ent
             elif field == "Valid ID":
@@ -409,7 +415,6 @@ class TenantTrackerApp(ctk.CTk):
         for t in tenants:
             tid, name, due_date, monthly = t
             
-            # CRITICAL FIX: Safe parsing for Monthly Due to prevent crash
             monthly_val = self.safe_float(monthly)
             
             cursor.execute("SELECT remarks, last_edited FROM rent_ledger WHERE tenant_id=? AND month_year=?", (tid, month_str))
@@ -485,8 +490,7 @@ class TenantTrackerApp(ctk.CTk):
             messagebox.showinfo("Export Successful", f"Monthly Rental Report neatly formatted and saved to:\n\n{file_path}")
         except Exception as e:
             messagebox.showerror("Export Failed", f"Could not export file: {str(e)}")
-
-    # ==========================================
+# ==========================================
     # TAB 3: MONTHLY SUMMARY (GLORIFIED EXCEL)
     # ==========================================
     def trigger_summary_update(self, *args):
@@ -576,7 +580,6 @@ class TenantTrackerApp(ctk.CTk):
         self.bottom_math_frame = ctk.CTkFrame(self.tab_summary, height=220)
         self.bottom_math_frame.pack(fill="x", padx=10, pady=10)
 
-        # Left side: Generic Notes
         self.notes_frame = ctk.CTkFrame(self.bottom_math_frame, fg_color="transparent")
         self.notes_frame.pack(side="left", fill="both", expand=True, padx=10, pady=10)
         ctk.CTkLabel(self.notes_frame, text="Custom Computations & Notes", font=ctk.CTkFont(weight="bold")).pack(anchor="w")
@@ -584,7 +587,6 @@ class TenantTrackerApp(ctk.CTk):
         self.summary_notes_box.pack(fill="both", expand=True)
         self.summary_notes_box.bind("<FocusOut>", self.save_summary_totals)
 
-        # Right side: Specific UI Boxes for Computations
         self.totals_frame = ctk.CTkFrame(self.bottom_math_frame, fg_color="transparent", width=500)
         self.totals_frame.pack(side="right", fill="y", padx=10, pady=10)
 
@@ -593,13 +595,11 @@ class TenantTrackerApp(ctk.CTk):
         ctk.CTkLabel(self.totals_frame, text="Total Net Income = A - B - C - D - E", font=("Segoe UI", 11, "italic")).pack(anchor="e", padx=30, pady=(5, 0))
         self.tot_net_entry = self.create_total_row(self.totals_frame, "TOTAL NET INCOME =", "#000000")
 
-        # Visual Box 1: Income Sharing / Deductions
         box1 = ctk.CTkFrame(self.totals_frame, fg_color=("#e5e5e5", "#2b2b2b"), corner_radius=5)
         box1.pack(fill="x", pady=(10, 5))
         self.reyan_jp_entry = self.create_total_row(box1, "Reyan & JP tig", "#1f538d") 
         self.ricky_upa_entry = self.create_total_row(box1, "LESS RICKY UPA =", "#565b5e", suffix="for IPE") 
 
-        # Visual Box 2: Savings Roll-over
         box2 = ctk.CTkFrame(self.totals_frame, fg_color=("#e5e5e5", "#2b2b2b"), corner_radius=5)
         box2.pack(fill="x", pady=5)
         self.prev_sav_entry = self.create_total_row(box2, "Previous Savings =", "#006400") 
@@ -723,7 +723,6 @@ class TenantTrackerApp(ctk.CTk):
         conn.close()
         self.load_summary_table()
 
-    # CRITICAL FIX: Add Accidental Deletion Protection
     def delete_summary_row(self):
         selected = self.sum_table.selection()
         if not selected: return
@@ -853,7 +852,6 @@ class TenantTrackerApp(ctk.CTk):
         self.backup_btn = ctk.CTkButton(self.right_settings, text="💾 Create Full System Backup", command=self.create_backup, fg_color="#B8860B", hover_color="#8B6508", text_color="white", font=ctk.CTkFont(weight="bold"))
         self.backup_btn.pack(anchor="w", padx=20, pady=10)
 
-        # CRITICAL FIX: Added Data Restore System
         restore_desc = ctk.CTkLabel(self.right_settings, text="Restore your entire system from a previously saved backup file. WARNING: This will overwrite all current data!", wraplength=350, justify="left", text_color="#8B0000")
         restore_desc.pack(anchor="w", padx=20, pady=(15, 10))
 
@@ -921,11 +919,223 @@ class TenantTrackerApp(ctk.CTk):
             except Exception as e:
                 messagebox.showerror("Restore Failed", f"An error occurred: {str(e)}")
 
+    # ==========================================
+    # HELPER AND GLOBAL FUNCTIONS
+    # ==========================================
+    def get_active_tenant_names(self):
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT full_name FROM tenants WHERE status='Active'")
+        names = [row[0] for row in cursor.fetchall()]
+        conn.close()
+        return names if names else ["No Active Tenants"]
+
+    def validate_numeric_var(self, str_var):
+        cv = str_var.get()
+        filtered = ''.join([c for c in cv if c.isdigit() or c == '.'])
+        if filtered.count('.') > 1:
+            parts = filtered.split('.')
+            filtered = parts[0] + '.' + ''.join(parts[1:])
+        if cv != filtered: str_var.set(filtered)
+
+    def update_clock(self):
+        current_time = time.strftime('%I:%M:%S %p | %B %d, %Y')
+        self.clock_label.configure(text=current_time)
+        self.after(1000, self.update_clock)
+
+    def trigger_search(self, *args):
+        self.load_tenants_from_db()
+
+    def validate_contact(self, *args):
+        cv = self.contact_var.get()
+        no_letters = ''.join(filter(str.isdigit, cv))
+        if cv != no_letters: self.contact_var.set(no_letters)
+
+    def upload_id_image(self):
+        file_path = filedialog.askopenfilename(title="Select ID Image", filetypes=[("Image Files", "*.png;*.jpg;*.jpeg")])
+        if file_path:
+            filename = f"{int(time.time())}.jpg"
+            destination = os.path.join(UPLOADS_DIR, filename)
+            
+            try:
+                img = Image.open(file_path)
+                img.convert("RGB").save(destination, "JPEG", optimize=True, quality=75)
+                
+                ent = self.entries["Valid ID"]
+                ent.configure(state="normal")
+                ent.delete(0, 'end')
+                ent.insert(0, destination)
+                ent.configure(state="readonly")
+            except Exception as e:
+                messagebox.showerror("Image Error", f"Could not process image: {str(e)}")
+
+    def view_tenant_details(self):
+        selected = self.tenant_table.selection()
+        if not selected: return 
+        vals = self.tenant_table.item(selected[0])['values']
+        t_name = str(vals[2])
+        win = ctk.CTkToplevel(self)
+        win.title(f"Tenant Card: {t_name}")
+        win.geometry("550x800")
+        win.attributes("-topmost", True) 
+        
+        ctk.CTkLabel(win, text=f"Data for: {t_name}", font=ctk.CTkFont(size=20, weight="bold")).pack(pady=(20, 10))
+        scroll = ctk.CTkScrollableFrame(win, width=500, height=650)
+        scroll.pack(padx=20, pady=10, fill="both", expand=True)
+        
+        for idx, col in enumerate(self.columns):
+            val = vals[idx]
+            d_val = str(val) if val not in ["None", ""] else "N/A"
+            if col == "Notes":
+                ctk.CTkLabel(scroll, text=f"{col}:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(15, 0), padx=5)
+                box = ctk.CTkTextbox(scroll, width=460, height=100)
+                box.pack(anchor="w", pady=(0, 10), padx=5)
+                box.insert("1.0", d_val)
+                box.configure(state="disabled") 
+            elif col == "Valid ID" and d_val != "N/A" and os.path.exists(d_val):
+                ctk.CTkLabel(scroll, text="Valid ID Image:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(10, 0), padx=5)
+                try:
+                    img = Image.open(d_val)
+                    w, h = img.size
+                    ctk_img = ctk.CTkImage(light_image=img, dark_image=img, size=(450, int(h * (450/w))))
+                    ctk.CTkLabel(scroll, image=ctk_img, text="").pack(anchor="w", pady=(5, 10), padx=5)
+                except: ctk.CTkLabel(scroll, text="[Image could not be loaded]").pack(anchor="w", padx=5)
+            else:
+                row = ctk.CTkFrame(scroll, fg_color="transparent")
+                row.pack(fill="x", pady=4, padx=5)
+                ctk.CTkLabel(row, text=f"{col}:", font=ctk.CTkFont(weight="bold"), width=120, anchor="w").pack(side="left")
+                ctk.CTkLabel(row, text=d_val, anchor="w", wraplength=340, justify="left").pack(side="left", fill="x", expand=True)
+        ctk.CTkButton(win, text="Close Window", command=win.destroy, fg_color=("#d3d3d3", "#565b5e"), hover_color=("#c8c8c8", "#343638"), text_color=("black", "white")).pack(pady=(10, 20))
+
+    def show_context_menu(self, event):
+        if self.tenant_table.identify_region(event.x, event.y) == "cell":
+            self.r_row = self.tenant_table.identify_row(event.y)
+            self.r_col = self.tenant_table.identify_column(event.x)
+            self.tenant_table.selection_set(self.r_row)
+            self.context_menu.tk_popup(event.x_root, event.y_root)
+
+    def copy_cell(self):
+        if hasattr(self, 'r_row') and hasattr(self, 'r_col'):
+            idx = int(self.r_col.replace('#', '')) - 1
+            vals = self.tenant_table.item(self.r_row)['values']
+            if 0 <= idx < len(vals):
+                self.clipboard_clear()
+                self.clipboard_append(str(vals[idx]))
+                self.update() 
+                self.title("TenantTracker Admin - Copied to Clipboard!")
+                self.after(1500, lambda: self.title("TenantTracker Admin"))
+
+    def reset_table_columns(self):
+        widths = {"ID": 40, "Status": 80, "Name": 180, "Address": 280, "Room": 60, "Started": 100, "Term": 80, "Move Out": 100, "Monthly": 90, "Due Date": 100, "Valid ID": 130, "Job": 140, "Messenger": 180, "Email": 220, "Contact": 120, "Notes": 250, "Agreement": 80, "Advance": 80, "Deposit": 80, "Last Edited": 170}
+        for col, w in widths.items():
+            self.tenant_table.column(col, width=w, anchor="w" if col in ["Name", "Address", "Messenger", "Email", "Notes", "Job", "Valid ID"] else "center")
+
+    def toggle_form(self):
+        if self.form_visible:
+            self.form_frame.pack_forget()
+            self.toggle_btn.configure(text="+ Add New Tenant", fg_color="#1f538d", hover_color="#14375e")
+            self.form_visible = False
+            if self.editing_tenant_id: self.clear_form()
+        else:
+            self.form_frame.pack(side="left", fill="y", padx=(0, 10), before=self.table_frame)
+            self.toggle_btn.configure(text="- Close Form", fg_color="#8B0000", hover_color="#660000")
+            self.form_visible = True
+
+    def load_for_editing(self):
+        selected = self.tenant_table.selection()
+        if not selected: return
+        vals = self.tenant_table.item(selected[0])['values']
+        if not self.form_visible: self.toggle_form()
+        self.editing_tenant_id = vals[0]
+        self.save_btn.configure(text="Update Tenant", fg_color="#B8860B", hover_color="#8B6508")
+        
+        for idx, field in enumerate(self.fields):
+            v = str(vals[idx + 1]) if vals[idx + 1] != "None" else ""
+            if field in ["Date Started", "Move Out Date"]: self.entries[field].set_date(v)
+            elif field == "Status": self.entries[field].set(v)
+            elif field == "Valid ID":
+                self.entries[field].configure(state="normal")
+                self.entries[field].delete(0, 'end')
+                self.entries[field].insert(0, v)
+                self.entries[field].configure(state="readonly")
+            else:
+                self.entries[field].delete(0, 'end')
+                self.entries[field].insert(0, v)
+        self.notes_box.delete("1.0", "end")
+        self.notes_box.insert("1.0", str(vals[15]) if vals[15] != "None" else "")
+        self.check_vars["Agreement Signed"].set(1 if vals[16] == "Yes" else 0)
+        self.check_vars["Advance Paid"].set(1 if vals[17] == "Yes" else 0)
+        self.check_vars["Deposit Paid"].set(1 if vals[18] == "Yes" else 0)
+
+    def delete_tenant(self):
+        selected = self.tenant_table.selection()
+        if not selected: return
+        confirm = messagebox.askyesno("Confirm Deletion", "Are you sure you want to delete this tenant?\n\nThis action cannot be undone.")
+        if confirm:
+            row_vals = self.tenant_table.item(selected[0])['values']
+            t_id = row_vals[0]
+            valid_id_path = row_vals[10]
+            
+            if valid_id_path and str(valid_id_path) != "None" and os.path.exists(valid_id_path):
+                try:
+                    os.remove(valid_id_path)
+                except Exception:
+                    pass
+
+            conn = sqlite3.connect(DB_PATH)
+            conn.cursor().execute("DELETE FROM tenants WHERE id = ?", (t_id,))
+            conn.commit()
+            conn.close()
+            self.load_tenants_from_db()
+
+    def clear_form(self):
+        for f, e in self.entries.items():
+            if f in ["Date Started", "Move Out Date"]: e.set_date(time.strftime('%Y-%m-%d'))
+            elif f == "Status": e.set("Active")
+            elif f == "Valid ID":
+                e.configure(state="normal")
+                e.delete(0, 'end')
+                e.configure(state="readonly")
+            else: e.delete(0, 'end')
+        self.notes_box.delete("1.0", "end")
+        for v in self.check_vars.values(): v.set(0)
+        self.editing_tenant_id = None
+        self.save_btn.configure(text="Save Tenant", fg_color="green", hover_color="darkgreen")
+
+    def save_tenant_to_db(self):
+        data = [self.entries[f].get() for f in self.fields]
+        data.append(self.notes_box.get("1.0", "end-1c")) 
+        data.extend([self.check_vars[c].get() for c in self.check_vars])
+        data.append(time.strftime('%Y-%m-%d %I:%M %p'))
+
+        conn = sqlite3.connect(DB_PATH)
+        if self.editing_tenant_id:
+            data.append(self.editing_tenant_id)
+            conn.cursor().execute('''UPDATE tenants SET status=?, full_name=?, address=?, room_number=?, date_started=?, lease_term=?, move_out_date=?, monthly_due=?, rent_due_date=?, valid_id=?, job=?, messenger_link=?, email=?, contact_number=?, notes=?, agreement_signed=?, advance_paid=?, deposit_paid=?, last_edited=? WHERE id=?''', data)
+        else:
+            conn.cursor().execute('''INSERT INTO tenants (status, full_name, address, room_number, date_started, lease_term, move_out_date, monthly_due, rent_due_date, valid_id, job, messenger_link, email, contact_number, notes, agreement_signed, advance_paid, deposit_paid, last_edited) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', data)
+        conn.commit()
+        conn.close()
+        self.clear_form()
+        self.load_tenants_from_db()
+        self.toggle_form()
+
+    def load_tenants_from_db(self):
+        for i in self.tenant_table.get_children(): self.tenant_table.delete(i)
+        conn = sqlite3.connect(DB_PATH)
+        stat, search = self.filter_var.get(), self.search_var.get()
+        q, p = "SELECT * FROM tenants WHERE 1=1", []
+        if stat != "All": q += " AND status = ?"; p.append(stat)
+        if search: q += " AND (full_name LIKE ? OR room_number LIKE ?)"; p.extend([f"%{search}%", f"%{search}%"])
+        cursor = conn.cursor()
+        cursor.execute(q, p)
+        for r in cursor.fetchall():
+            row = list(r)
+            row[16], row[17], row[18] = ["Yes" if x == 1 else "No" for x in (row[16], row[17], row[18])]
+            self.tenant_table.insert("", "end", values=row)
+        conn.close()
+
 if __name__ == "__main__":
-    # ==========================================
-    # CRITICAL FIX: SINGLE INSTANCE LOCK
-    # Prevents double-opening the app and corrupting data
-    # ==========================================
     try:
         lock_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         lock_socket.bind(('127.0.0.1', 47200)) 
