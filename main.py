@@ -42,6 +42,11 @@ class TenantTrackerApp(ctk.CTk):
         self.title("TenantTracker Admin")
         self.geometry("1200x750")
         
+        # Load the custom icon
+        icon_path = os.path.join(BASE_DIR, "icon.ico")
+        if os.path.exists(icon_path):
+            self.iconbitmap(icon_path)
+        
         self.tabview = ctk.CTkTabview(self, width=1150, height=700)
         self.tabview.pack(padx=20, pady=20, fill="both", expand=True)
 
