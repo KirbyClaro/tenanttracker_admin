@@ -15,6 +15,8 @@ import re
 from PIL import Image
 from database import init_db
 from tkcalendar import DateEntry
+import smtplib
+from email.message import EmailMessage
 
 # ==========================================
 # PRE-DEPLOYMENT PATH SAFETY
@@ -270,8 +272,7 @@ class TenantTrackerApp(ctk.CTk):
         self.export_tenants_btn.pack(side="right")
 
         self.load_tenants_from_db()
-
-    # ==========================================
+        # ==========================================
     # TAB 2: FINANCIALS (LEDGER SYSTEM)
     # ==========================================
     def trigger_ledger_update(self, *args):
@@ -495,7 +496,8 @@ class TenantTrackerApp(ctk.CTk):
             messagebox.showinfo("Export Successful", f"Monthly Rental Report neatly formatted and saved to:\n\n{file_path}")
         except Exception as e:
             messagebox.showerror("Export Failed", f"Could not export file: {str(e)}")
-# ==========================================
+
+    # ==========================================
     # TAB 3: MONTHLY SUMMARY (GLORIFIED EXCEL)
     # ==========================================
     def trigger_summary_update(self, *args):
@@ -794,8 +796,7 @@ class TenantTrackerApp(ctk.CTk):
             messagebox.showinfo("Export Successful", f"Summary cleanly exported to:\n\n{file_path}")
         except Exception as e:
             messagebox.showerror("Export Failed", f"Could not export file: {str(e)}")
-
-    # ==========================================
+            # ==========================================
     # TAB 4: SETTINGS & BACKUPS
     # ==========================================
     def setup_settings_tab(self):
@@ -845,6 +846,10 @@ class TenantTrackerApp(ctk.CTk):
 
         self.save_settings_btn = ctk.CTkButton(self.left_settings, text="Save Email & Automation Settings", command=self.save_app_settings, fg_color="green", hover_color="darkgreen", text_color="white")
         self.save_settings_btn.pack(anchor="w", padx=10, pady=10)
+
+        # NEW: Test Email Button
+        self.test_email_btn = ctk.CTkButton(self.left_settings, text="Test Email Connection", command=self.send_test_email, fg_color="#B8860B", hover_color="#8B6508", text_color="white")
+        self.test_email_btn.pack(anchor="w", padx=10, pady=10)
 
         self.right_settings = ctk.CTkFrame(self.set_content, width=400)
         self.right_settings.pack(side="right", fill="both", expand=True)
@@ -1139,6 +1144,39 @@ class TenantTrackerApp(ctk.CTk):
             row[16], row[17], row[18] = ["Yes" if x == 1 else "No" for x in (row[16], row[17], row[18])]
             self.tenant_table.insert("", "end", values=row)
         conn.close()
+
+    # ==========================================
+    # EMAIL AUTOMATION ENGINE
+    # ==========================================
+    def send_test_email(self):
+        email_addr = self.email_entry.get()
+        app_pass = self.pass_entry.get()
+
+        if not email_addr or not app_pass:
+            messagebox.showerror("Missing Info", "Please enter your Gmail Address and Google App Password first.")
+            return
+
+        try:
+            # Change button text to show it's working
+            self.test_email_btn.configure(text="Connecting to Gmail...", state="disabled")
+            self.update()
+
+            msg = EmailMessage()
+            msg.set_content("Success! Your TenantTracker email system is fully connected and ready to send reminders.")
+            msg['Subject'] = "TenantTracker System Test"
+            msg['From'] = email_addr
+            msg['To'] = email_addr # Sends the test to yourself
+
+            server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
+            server.login(email_addr, app_pass)
+            server.send_message(msg)
+            server.quit()
+            
+            self.test_email_btn.configure(text="Test Email Connection", state="normal")
+            messagebox.showinfo("Success!", "Test email sent successfully! Check your inbox.")
+        except Exception as e:
+            self.test_email_btn.configure(text="Test Email Connection", state="normal")
+            messagebox.showerror("Email Error", f"Connection failed. Please ensure you generated a Google APP PASSWORD (not your normal password).\n\nError: {str(e)}")
 
 if __name__ == "__main__":
     try:
