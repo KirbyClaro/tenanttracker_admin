@@ -9,15 +9,25 @@ import os
 import shutil
 import csv
 import zipfile
+import sys
 from PIL import Image
 from database import init_db
 from tkcalendar import DateEntry
 
-# Initialize database on launch
-init_db()
+# ==========================================
+# PRE-DEPLOYMENT PATH SAFETY
+# ==========================================
+if getattr(sys, 'frozen', False):
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Ensure the uploads directory exists
-os.makedirs("uploads", exist_ok=True)
+DB_PATH = os.path.join(BASE_DIR, "tenant_tracker.db")
+UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
+os.makedirs(UPLOADS_DIR, exist_ok=True)
+
+# Initialize database on launch securely
+init_db()
 
 class TenantTrackerApp(ctk.CTk):
     def __init__(self):
@@ -51,7 +61,7 @@ class TenantTrackerApp(ctk.CTk):
         self.apply_table_theme()
 
     def load_settings(self):
-        conn = sqlite3.connect('tenant_tracker.db')
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         cursor.execute("SELECT key, value FROM settings")
         settings = dict(cursor.fetchall())
@@ -365,7 +375,7 @@ class TenantTrackerApp(ctk.CTk):
         month_str = self.ledger_month.get()
         total_val = self.total_entry.get()
         
-        conn = sqlite3.connect('tenant_tracker.db')
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (f"ledger_total_{month_str}", total_val))
         conn.commit()
@@ -379,7 +389,7 @@ class TenantTrackerApp(ctk.CTk):
         for i in self.fin_table.get_children(): self.fin_table.delete(i)
         
         month_str = self.ledger_month.get()
-        conn = sqlite3.connect('tenant_tracker.db')
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         
         cursor.execute("SELECT id, full_name, rent_due_date, monthly_due FROM tenants WHERE status='Active'")
@@ -411,7 +421,7 @@ class TenantTrackerApp(ctk.CTk):
         month_str = self.ledger_month.get()
         timestamp = time.strftime('%Y-%m-%d %I:%M %p')
         
-        conn = sqlite3.connect('tenant_tracker.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         
         c.execute("SELECT id FROM rent_ledger WHERE tenant_id=? AND month_year=?", (tid, month_str))
@@ -532,7 +542,6 @@ class TenantTrackerApp(ctk.CTk):
         self.sum_table.column("Remarks / OK", width=150, anchor="center")
         self.sum_table.pack(fill="both", expand=True)
 
-        # UPDATED: Replaced inline edit with a reliable popup box!
         self.sum_table.bind("<Double-1>", self.open_summary_edit_popup)
 
         self.sum_action_frame = ctk.CTkFrame(self.sum_content, fg_color="transparent")
@@ -541,7 +550,6 @@ class TenantTrackerApp(ctk.CTk):
         self.add_row_btn = ctk.CTkButton(self.sum_action_frame, text="+ Add Blank Row", command=self.add_summary_row, fg_color="#1f538d", hover_color="#14375e", text_color="white", font=ctk.CTkFont(weight="bold"))
         self.add_row_btn.pack(side="left", padx=(0, 10))
 
-        # NEW: Added explicit edit button just like the financials tab
         self.edit_row_btn = ctk.CTkButton(self.sum_action_frame, text="✏️ Edit Row", command=self.open_summary_edit_popup, fg_color="#B8860B", hover_color="#8B6508", text_color="white", font=ctk.CTkFont(weight="bold"))
         self.edit_row_btn.pack(side="left", padx=(0, 10))
 
@@ -596,7 +604,6 @@ class TenantTrackerApp(ctk.CTk):
         vals = self.sum_table.item(item)['values']
         row_id = vals[0]
         
-        # Safely handle empty None values
         cat = vals[1] if str(vals[1]) != "None" else ""
         desc = vals[2] if str(vals[2]) != "None" else ""
         amt = vals[3] if str(vals[3]) != "None" else ""
@@ -610,7 +617,6 @@ class TenantTrackerApp(ctk.CTk):
 
         ctk.CTkLabel(dialog, text="Edit Row Data", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(20, 10))
 
-        # Helper to generate input fields
         def make_entry(lbl_text, default_val):
             frame = ctk.CTkFrame(dialog, fg_color="transparent")
             frame.pack(fill="x", padx=20, pady=5)
@@ -627,7 +633,7 @@ class TenantTrackerApp(ctk.CTk):
         ent_rem = make_entry("Remarks / OK:", rem)
 
         def save():
-            conn = sqlite3.connect('tenant_tracker.db')
+            conn = sqlite3.connect(DB_PATH)
             conn.cursor().execute('''
                 UPDATE summary_rows 
                 SET col_category=?, col_description=?, col_amount=?, col_total=?, col_remarks=? 
@@ -644,7 +650,7 @@ class TenantTrackerApp(ctk.CTk):
         for i in self.sum_table.get_children(): self.sum_table.delete(i)
         
         month_str = self.selected_month.get()
-        conn = sqlite3.connect('tenant_tracker.db')
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         
         cursor.execute("SELECT id, col_category, col_description, col_amount, col_total, col_remarks FROM summary_rows WHERE month_year=?", (month_str,))
@@ -698,7 +704,7 @@ class TenantTrackerApp(ctk.CTk):
 
     def add_summary_row(self):
         month_str = self.selected_month.get()
-        conn = sqlite3.connect('tenant_tracker.db')
+        conn = sqlite3.connect(DB_PATH)
         conn.cursor().execute("INSERT INTO summary_rows (month_year, col_category, col_description, col_amount, col_total, col_remarks) VALUES (?, '', '', '', '', '')", (month_str,))
         conn.commit()
         conn.close()
@@ -707,16 +713,18 @@ class TenantTrackerApp(ctk.CTk):
     def delete_summary_row(self):
         selected = self.sum_table.selection()
         if not selected: return
-        row_id = self.sum_table.item(selected[0])['values'][0]
-        conn = sqlite3.connect('tenant_tracker.db')
-        conn.cursor().execute("DELETE FROM summary_rows WHERE id=?", (row_id,))
-        conn.commit()
-        conn.close()
-        self.load_summary_table()
+        confirm = messagebox.askyesno("Confirm Deletion", "Are you sure you want to delete this row from the summary?")
+        if confirm:
+            row_id = self.sum_table.item(selected[0])['values'][0]
+            conn = sqlite3.connect(DB_PATH)
+            conn.cursor().execute("DELETE FROM summary_rows WHERE id=?", (row_id,))
+            conn.commit()
+            conn.close()
+            self.load_summary_table()
 
     def save_summary_totals(self, event=None):
         month_str = self.selected_month.get()
-        conn = sqlite3.connect('tenant_tracker.db')
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         
         cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (f"sum_notes_{month_str}", self.summary_notes_box.get("1.0", "end-1c")))
@@ -834,7 +842,7 @@ class TenantTrackerApp(ctk.CTk):
     # --- Settings Functions ---
     def change_theme(self, new_theme):
         ctk.set_appearance_mode(new_theme)
-        conn = sqlite3.connect('tenant_tracker.db')
+        conn = sqlite3.connect(DB_PATH)
         conn.cursor().execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('theme', ?)", (new_theme,))
         conn.commit()
         conn.close()
@@ -846,7 +854,7 @@ class TenantTrackerApp(ctk.CTk):
         days = self.days_combo.get()
         template = self.template_box.get("1.0", "end-1c")
 
-        conn = sqlite3.connect('tenant_tracker.db')
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('sender_email', ?)", (email,))
         cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('sender_password', ?)", (password,))
@@ -866,16 +874,19 @@ class TenantTrackerApp(ctk.CTk):
 
         try:
             with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as backup_zip:
-                if os.path.exists('tenant_tracker.db'): backup_zip.write('tenant_tracker.db')
-                if os.path.exists('uploads'):
-                    for root, dirs, files in os.walk('uploads'):
-                        for file in files: backup_zip.write(os.path.join(root, file))
+                if os.path.exists(DB_PATH): backup_zip.write(DB_PATH, os.path.basename(DB_PATH))
+                if os.path.exists(UPLOADS_DIR):
+                    for root, dirs, files in os.walk(UPLOADS_DIR):
+                        for file in files:
+                            file_path = os.path.join(root, file)
+                            arcname = os.path.relpath(file_path, BASE_DIR)
+                            backup_zip.write(file_path, arcname)
             messagebox.showinfo("Backup Successful!", f"System completely backed up to:\n\n{zip_path}")
         except Exception as e:
             messagebox.showerror("Backup Failed", f"An error occurred: {str(e)}")
 
     def export_to_csv(self, table_name):
-        conn = sqlite3.connect('tenant_tracker.db')
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         cursor.execute(f"SELECT * FROM {table_name}")
         rows = cursor.fetchall()
@@ -898,12 +909,11 @@ class TenantTrackerApp(ctk.CTk):
             except Exception as e:
                 messagebox.showerror("Export Failed", f"Could not export file: {str(e)}")
 
-
     # ==========================================
     # HELPER AND GLOBAL FUNCTIONS
     # ==========================================
     def get_active_tenant_names(self):
-        conn = sqlite3.connect('tenant_tracker.db')
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         cursor.execute("SELECT full_name FROM tenants WHERE status='Active'")
         names = [row[0] for row in cursor.fetchall()]
@@ -931,17 +941,25 @@ class TenantTrackerApp(ctk.CTk):
         no_letters = ''.join(filter(str.isdigit, cv))
         if cv != no_letters: self.contact_var.set(no_letters)
 
+    # CRITICAL FIX: COMPRESS IMAGES BEFORE SAVING
     def upload_id_image(self):
         file_path = filedialog.askopenfilename(title="Select ID Image", filetypes=[("Image Files", "*.png;*.jpg;*.jpeg")])
         if file_path:
-            filename = f"{int(time.time())}_{os.path.basename(file_path)}"
-            destination = os.path.join("uploads", filename)
-            shutil.copy(file_path, destination)
-            ent = self.entries["Valid ID"]
-            ent.configure(state="normal")
-            ent.delete(0, 'end')
-            ent.insert(0, destination)
-            ent.configure(state="readonly")
+            filename = f"{int(time.time())}.jpg"
+            destination = os.path.join(UPLOADS_DIR, filename)
+            
+            try:
+                # Compress and resize image to prevent massive database bloating
+                img = Image.open(file_path)
+                img.convert("RGB").save(destination, "JPEG", optimize=True, quality=75)
+                
+                ent = self.entries["Valid ID"]
+                ent.configure(state="normal")
+                ent.delete(0, 'end')
+                ent.insert(0, destination)
+                ent.configure(state="readonly")
+            except Exception as e:
+                messagebox.showerror("Image Error", f"Could not process image: {str(e)}")
 
     def view_tenant_details(self):
         selected = self.tenant_table.selection()
@@ -1041,13 +1059,25 @@ class TenantTrackerApp(ctk.CTk):
         self.check_vars["Advance Paid"].set(1 if vals[17] == "Yes" else 0)
         self.check_vars["Deposit Paid"].set(1 if vals[18] == "Yes" else 0)
 
+    # CRITICAL FIX: CLEAN UP IMAGE FILE IF TENANT IS DELETED
     def delete_tenant(self):
         selected = self.tenant_table.selection()
         if not selected: return
         confirm = messagebox.askyesno("Confirm Deletion", "Are you sure you want to delete this tenant?\n\nThis action cannot be undone.")
         if confirm:
-            conn = sqlite3.connect('tenant_tracker.db')
-            conn.cursor().execute("DELETE FROM tenants WHERE id = ?", (self.tenant_table.item(selected[0])['values'][0],))
+            row_vals = self.tenant_table.item(selected[0])['values']
+            t_id = row_vals[0]
+            valid_id_path = row_vals[10]
+            
+            # Clean up the photo from the hard drive so it doesn't leave orphaned files!
+            if valid_id_path and str(valid_id_path) != "None" and os.path.exists(valid_id_path):
+                try:
+                    os.remove(valid_id_path)
+                except Exception:
+                    pass
+
+            conn = sqlite3.connect(DB_PATH)
+            conn.cursor().execute("DELETE FROM tenants WHERE id = ?", (t_id,))
             conn.commit()
             conn.close()
             self.load_tenants_from_db()
@@ -1072,7 +1102,7 @@ class TenantTrackerApp(ctk.CTk):
         data.extend([self.check_vars[c].get() for c in self.check_vars])
         data.append(time.strftime('%Y-%m-%d %I:%M %p'))
 
-        conn = sqlite3.connect('tenant_tracker.db')
+        conn = sqlite3.connect(DB_PATH)
         if self.editing_tenant_id:
             data.append(self.editing_tenant_id)
             conn.cursor().execute('''UPDATE tenants SET status=?, full_name=?, address=?, room_number=?, date_started=?, lease_term=?, move_out_date=?, monthly_due=?, rent_due_date=?, valid_id=?, job=?, messenger_link=?, email=?, contact_number=?, notes=?, agreement_signed=?, advance_paid=?, deposit_paid=?, last_edited=? WHERE id=?''', data)
@@ -1086,7 +1116,7 @@ class TenantTrackerApp(ctk.CTk):
 
     def load_tenants_from_db(self):
         for i in self.tenant_table.get_children(): self.tenant_table.delete(i)
-        conn = sqlite3.connect('tenant_tracker.db')
+        conn = sqlite3.connect(DB_PATH)
         stat, search = self.filter_var.get(), self.search_var.get()
         q, p = "SELECT * FROM tenants WHERE 1=1", []
         if stat != "All": q += " AND status = ?"; p.append(stat)

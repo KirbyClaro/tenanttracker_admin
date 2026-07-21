@@ -1,7 +1,17 @@
 import sqlite3
+import os
+import sys
+
+# Get absolute path to folder where script/exe is running
+if getattr(sys, 'frozen', False):
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+DB_PATH = os.path.join(BASE_DIR, "tenant_tracker.db")
 
 def init_db():
-    conn = sqlite3.connect('tenant_tracker.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
     cursor.execute('''
@@ -40,7 +50,6 @@ def init_db():
         )
     ''')
 
-    # NEW TABLE: Glorified Excel Rows for Monthly Summary
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS summary_rows (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,4 +75,4 @@ def init_db():
 
 if __name__ == "__main__":
     init_db()
-    print("Database initialized successfully.")
+    print("Database initialized successfully at:", DB_PATH)
