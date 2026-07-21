@@ -532,13 +532,18 @@ class TenantTrackerApp(ctk.CTk):
         self.sum_table.column("Remarks / OK", width=150, anchor="center")
         self.sum_table.pack(fill="both", expand=True)
 
-        self.sum_table.bind("<Double-1>", self.edit_summary_cell)
+        # UPDATED: Replaced inline edit with a reliable popup box!
+        self.sum_table.bind("<Double-1>", self.open_summary_edit_popup)
 
         self.sum_action_frame = ctk.CTkFrame(self.sum_content, fg_color="transparent")
         self.sum_action_frame.pack(fill="x", pady=(10, 0))
 
         self.add_row_btn = ctk.CTkButton(self.sum_action_frame, text="+ Add Blank Row", command=self.add_summary_row, fg_color="#1f538d", hover_color="#14375e", text_color="white", font=ctk.CTkFont(weight="bold"))
         self.add_row_btn.pack(side="left", padx=(0, 10))
+
+        # NEW: Added explicit edit button just like the financials tab
+        self.edit_row_btn = ctk.CTkButton(self.sum_action_frame, text="✏️ Edit Row", command=self.open_summary_edit_popup, fg_color="#B8860B", hover_color="#8B6508", text_color="white", font=ctk.CTkFont(weight="bold"))
+        self.edit_row_btn.pack(side="left", padx=(0, 10))
 
         self.del_row_btn = ctk.CTkButton(self.sum_action_frame, text="- Delete Row", command=self.delete_summary_row, fg_color="#8B0000", hover_color="#660000", text_color="white")
         self.del_row_btn.pack(side="left", padx=(0, 10))
@@ -581,6 +586,60 @@ class TenantTrackerApp(ctk.CTk):
 
         self.load_summary_table()
 
+    def open_summary_edit_popup(self, event=None):
+        selected = self.sum_table.selection()
+        if not selected:
+            messagebox.showwarning("Select Row", "Please click on a row first to edit it.")
+            return
+
+        item = selected[0]
+        vals = self.sum_table.item(item)['values']
+        row_id = vals[0]
+        
+        # Safely handle empty None values
+        cat = vals[1] if str(vals[1]) != "None" else ""
+        desc = vals[2] if str(vals[2]) != "None" else ""
+        amt = vals[3] if str(vals[3]) != "None" else ""
+        tot = vals[4] if str(vals[4]) != "None" else ""
+        rem = vals[5] if str(vals[5]) != "None" else ""
+
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("Edit Summary Row")
+        dialog.geometry("450x450")
+        dialog.attributes("-topmost", True)
+
+        ctk.CTkLabel(dialog, text="Edit Row Data", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(20, 10))
+
+        # Helper to generate input fields
+        def make_entry(lbl_text, default_val):
+            frame = ctk.CTkFrame(dialog, fg_color="transparent")
+            frame.pack(fill="x", padx=20, pady=5)
+            ctk.CTkLabel(frame, text=lbl_text, width=100, anchor="e").pack(side="left", padx=(0, 10))
+            ent = ctk.CTkEntry(frame, width=250)
+            ent.pack(side="left")
+            ent.insert(0, default_val)
+            return ent
+
+        ent_cat = make_entry("Category:", cat)
+        ent_desc = make_entry("Description:", desc)
+        ent_amt = make_entry("Amount:", amt)
+        ent_tot = make_entry("Total:", tot)
+        ent_rem = make_entry("Remarks / OK:", rem)
+
+        def save():
+            conn = sqlite3.connect('tenant_tracker.db')
+            conn.cursor().execute('''
+                UPDATE summary_rows 
+                SET col_category=?, col_description=?, col_amount=?, col_total=?, col_remarks=? 
+                WHERE id=?
+            ''', (ent_cat.get(), ent_desc.get(), ent_amt.get(), ent_tot.get(), ent_rem.get(), row_id))
+            conn.commit()
+            conn.close()
+            dialog.destroy()
+            self.load_summary_table()
+
+        ctk.CTkButton(dialog, text="Save Changes", command=save, fg_color="green", hover_color="darkgreen", text_color="white").pack(pady=20)
+
     def load_summary_table(self):
         for i in self.sum_table.get_children(): self.sum_table.delete(i)
         
@@ -591,9 +650,6 @@ class TenantTrackerApp(ctk.CTk):
         cursor.execute("SELECT id, col_category, col_description, col_amount, col_total, col_remarks FROM summary_rows WHERE month_year=?", (month_str,))
         rows = cursor.fetchall()
 
-        # ==============================================================
-        # NEW FEATURE: AUTOMATICALLY GENERATE TEMPLATE FOR NEW MONTHS
-        # ==============================================================
         if not rows:
             template = [
                 (month_str, "MAYNILAD", "HOUSE A", "", "", ""),
@@ -614,10 +670,8 @@ class TenantTrackerApp(ctk.CTk):
             cursor.executemany("INSERT INTO summary_rows (month_year, col_category, col_description, col_amount, col_total, col_remarks) VALUES (?, ?, ?, ?, ?, ?)", template)
             conn.commit()
             
-            # Fetch the newly generated template rows
             cursor.execute("SELECT id, col_category, col_description, col_amount, col_total, col_remarks FROM summary_rows WHERE month_year=?", (month_str,))
             rows = cursor.fetchall()
-        # ==============================================================
 
         for row in rows:
             self.sum_table.insert("", "end", values=row)
@@ -659,39 +713,6 @@ class TenantTrackerApp(ctk.CTk):
         conn.commit()
         conn.close()
         self.load_summary_table()
-
-    def edit_summary_cell(self, event):
-        selected = self.sum_table.selection()
-        if not selected: return
-        item = selected[0]
-        col_id = self.sum_table.identify_column(event.x)
-        
-        if col_id == "#1": return 
-
-        col_index = int(col_id.replace("#", "")) - 1
-        db_columns = ["id", "col_category", "col_description", "col_amount", "col_total", "col_remarks"]
-        db_target = db_columns[col_index]
-
-        x, y, w, h = self.sum_table.bbox(item, col_id)
-        entry = ctk.CTkEntry(self.sum_table, width=w, corner_radius=0)
-        entry.place(x=x, y=y, width=w, height=h)
-        
-        current_val = self.sum_table.item(item, "values")[col_index]
-        entry.insert(0, current_val if current_val and str(current_val) != "None" else "")
-
-        def save_edit(e=None):
-            new_val = entry.get()
-            row_id = self.sum_table.item(item, "values")[0]
-            conn = sqlite3.connect('tenant_tracker.db')
-            conn.cursor().execute(f"UPDATE summary_rows SET {db_target}=? WHERE id=?", (new_val, row_id))
-            conn.commit()
-            conn.close()
-            entry.destroy()
-            self.load_summary_table()
-
-        entry.bind("<Return>", save_edit)
-        entry.bind("<FocusOut>", lambda e: entry.destroy())
-        entry.focus()
 
     def save_summary_totals(self, event=None):
         month_str = self.selected_month.get()
@@ -853,7 +874,32 @@ class TenantTrackerApp(ctk.CTk):
         except Exception as e:
             messagebox.showerror("Backup Failed", f"An error occurred: {str(e)}")
 
-# ==========================================
+    def export_to_csv(self, table_name):
+        conn = sqlite3.connect('tenant_tracker.db')
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT * FROM {table_name}")
+        rows = cursor.fetchall()
+        column_names = [description[0] for description in cursor.description]
+        conn.close()
+
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".csv", filetypes=[("CSV Spreadsheet", "*.csv")],
+            title=f"Export {table_name.title()}",
+            initialfile=f"{table_name}_export_{datetime.now().strftime('%Y%m%d')}.csv"
+        )
+
+        if file_path:
+            try:
+                with open(file_path, mode='w', newline='', encoding='utf-8') as file:
+                    writer = csv.writer(file)
+                    writer.writerow(column_names)
+                    writer.writerows(rows)
+                messagebox.showinfo("Export Successful", f"Excel-ready file saved to:\n\n{file_path}")
+            except Exception as e:
+                messagebox.showerror("Export Failed", f"Could not export file: {str(e)}")
+
+
+    # ==========================================
     # HELPER AND GLOBAL FUNCTIONS
     # ==========================================
     def get_active_tenant_names(self):
