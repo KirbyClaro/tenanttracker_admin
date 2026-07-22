@@ -272,7 +272,8 @@ class TenantTrackerApp(ctk.CTk):
         self.export_tenants_btn.pack(side="right")
 
         self.load_tenants_from_db()
-        # ==========================================
+
+    # ==========================================
     # TAB 2: FINANCIALS (LEDGER SYSTEM)
     # ==========================================
     def trigger_ledger_update(self, *args):
@@ -496,8 +497,7 @@ class TenantTrackerApp(ctk.CTk):
             messagebox.showinfo("Export Successful", f"Monthly Rental Report neatly formatted and saved to:\n\n{file_path}")
         except Exception as e:
             messagebox.showerror("Export Failed", f"Could not export file: {str(e)}")
-
-    # ==========================================
+            # ==========================================
     # TAB 3: MONTHLY SUMMARY (GLORIFIED EXCEL)
     # ==========================================
     def trigger_summary_update(self, *args):
@@ -796,7 +796,8 @@ class TenantTrackerApp(ctk.CTk):
             messagebox.showinfo("Export Successful", f"Summary cleanly exported to:\n\n{file_path}")
         except Exception as e:
             messagebox.showerror("Export Failed", f"Could not export file: {str(e)}")
-            # ==========================================
+
+    # ==========================================
     # TAB 4: SETTINGS & BACKUPS
     # ==========================================
     def setup_settings_tab(self):
@@ -847,9 +848,13 @@ class TenantTrackerApp(ctk.CTk):
         self.save_settings_btn = ctk.CTkButton(self.left_settings, text="Save Email & Automation Settings", command=self.save_app_settings, fg_color="green", hover_color="darkgreen", text_color="white")
         self.save_settings_btn.pack(anchor="w", padx=10, pady=10)
 
-        # NEW: Test Email Button
+        # TEST EMAIL BUTTON
         self.test_email_btn = ctk.CTkButton(self.left_settings, text="Test Email Connection", command=self.send_test_email, fg_color="#B8860B", hover_color="#8B6508", text_color="white")
         self.test_email_btn.pack(anchor="w", padx=10, pady=10)
+
+        # THE REAL BUTTON: Process and Send to Tenants
+        self.send_reminders_btn = ctk.CTkButton(self.left_settings, text="🚀 Scan & Send Reminders Now", command=self.send_real_reminders, fg_color="#8B0000", hover_color="#660000", text_color="white", font=ctk.CTkFont(weight="bold"))
+        self.send_reminders_btn.pack(anchor="w", padx=10, pady=(10, 20))
 
         self.right_settings = ctk.CTkFrame(self.set_content, width=400)
         self.right_settings.pack(side="right", fill="both", expand=True)
@@ -928,8 +933,7 @@ class TenantTrackerApp(ctk.CTk):
                 sys.exit()
             except Exception as e:
                 messagebox.showerror("Restore Failed", f"An error occurred: {str(e)}")
-
-    # ==========================================
+                # ==========================================
     # HELPER AND GLOBAL FUNCTIONS
     # ==========================================
     def get_active_tenant_names(self):
@@ -1157,7 +1161,6 @@ class TenantTrackerApp(ctk.CTk):
             return
 
         try:
-            # Change button text to show it's working
             self.test_email_btn.configure(text="Connecting to Gmail...", state="disabled")
             self.update()
 
@@ -1165,7 +1168,7 @@ class TenantTrackerApp(ctk.CTk):
             msg.set_content("Success! Your TenantTracker email system is fully connected and ready to send reminders.")
             msg['Subject'] = "TenantTracker System Test"
             msg['From'] = email_addr
-            msg['To'] = email_addr # Sends the test to yourself
+            msg['To'] = email_addr 
 
             server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
             server.login(email_addr, app_pass)
@@ -1177,6 +1180,87 @@ class TenantTrackerApp(ctk.CTk):
         except Exception as e:
             self.test_email_btn.configure(text="Test Email Connection", state="normal")
             messagebox.showerror("Email Error", f"Connection failed. Please ensure you generated a Google APP PASSWORD (not your normal password).\n\nError: {str(e)}")
+
+    def send_real_reminders(self):
+        email_addr = self.email_entry.get()
+        app_pass = self.pass_entry.get()
+        days_notice = int(self.days_combo.get())
+        template = self.template_box.get("1.0", "end-1c")
+
+        if not email_addr or not app_pass:
+            messagebox.showerror("Error", "Please configure your email settings first.")
+            return
+
+        confirm = messagebox.askyesno("Confirm Automation", f"Are you sure you want to scan the database and send emails to tenants whose rent is due in {days_notice} days?")
+        if not confirm: return
+
+        # 1. Get today's day of the month
+        current_day = int(datetime.now().strftime("%d"))
+        target_due_day = current_day + days_notice
+
+        # Handle end of month rollover
+        if target_due_day > 30: 
+            target_due_day = target_due_day - 30
+
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT full_name, monthly_due, rent_due_date, email FROM tenants WHERE status='Active'")
+        tenants = cursor.fetchall()
+        conn.close()
+
+        sent_count = 0
+        errors = []
+
+        self.send_reminders_btn.configure(text="Sending Emails...", state="disabled")
+        self.update()
+
+        try:
+            server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
+            server.login(email_addr, app_pass)
+
+            for t in tenants:
+                name, monthly, due_date_str, t_email = t
+                
+                if not t_email or str(t_email) == "None" or not due_date_str:
+                    continue
+
+                try:
+                    due_day = int(re.search(r'\d+', str(due_date_str)).group())
+                    
+                    if due_day == target_due_day:
+                        msg = EmailMessage()
+                        
+                        custom_msg = template.replace("{name}", str(name))
+                        custom_msg = custom_msg.replace("{amount}", f"{self.safe_float(monthly):,.2f}")
+                        custom_msg = custom_msg.replace("{date}", f"the {due_day}th")
+                        
+                        msg.set_content(custom_msg)
+                        msg['Subject'] = "Upcoming Rent Reminder - TenantTracker"
+                        msg['From'] = email_addr
+                        msg['To'] = t_email
+
+                        server.send_message(msg)
+                        sent_count += 1
+                        
+                except Exception as parse_err:
+                    errors.append(f"Could not read due date for {name}")
+
+            server.quit()
+
+            self.send_reminders_btn.configure(text="🚀 Scan & Send Reminders Now", state="normal")
+            
+            if sent_count > 0:
+                messagebox.showinfo("Complete!", f"Successfully sent {sent_count} reminder email(s)!")
+            else:
+                messagebox.showinfo("Scan Complete", f"No tenants have rent due in exactly {days_notice} days. 0 emails sent.")
+                
+            if errors:
+                print("Reminder Errors:", errors) 
+
+        except Exception as e:
+            self.send_reminders_btn.configure(text="🚀 Scan & Send Reminders Now", state="normal")
+            messagebox.showerror("Error", f"An error occurred while sending: {str(e)}")
+
 
 if __name__ == "__main__":
     try:
