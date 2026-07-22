@@ -272,8 +272,7 @@ class TenantTrackerApp(ctk.CTk):
         self.export_tenants_btn.pack(side="right")
 
         self.load_tenants_from_db()
-
-    # ==========================================
+        # ==========================================
     # TAB 2: FINANCIALS (LEDGER SYSTEM)
     # ==========================================
     def trigger_ledger_update(self, *args):
@@ -286,6 +285,19 @@ class TenantTrackerApp(ctk.CTk):
 
         self.fin_title = ctk.CTkLabel(self.fin_header, text="Monthly Rental Report", font=ctk.CTkFont(size=24, weight="bold"))
         self.fin_title.pack(side="left")
+
+        # UI Fix: Add Refresh & Reset Buttons to the FAR RIGHT
+        self.reset_fin_cols_btn = ctk.CTkButton(
+            self.fin_header, text="Reset Columns", command=self.reset_fin_columns, 
+            width=100, fg_color=("#d3d3d3", "#565b5e"), hover_color=("#c8c8c8", "#343638"), text_color=("black", "white")
+        )
+        self.reset_fin_cols_btn.pack(side="right", padx=(5, 0))
+
+        self.refresh_fin_btn = ctk.CTkButton(
+            self.fin_header, text="Refresh", command=self.load_ledger, 
+            width=80, fg_color="#1f538d", hover_color="#14375e", text_color="white"
+        )
+        self.refresh_fin_btn.pack(side="right", padx=(20, 5))
 
         current_year = str(datetime.now().year)
         current_month = str(datetime.now().strftime('%m'))
@@ -323,15 +335,9 @@ class TenantTrackerApp(ctk.CTk):
         for col in self.fin_columns:
             self.fin_table.heading(col, text=col)
             
-        self.fin_table.column("ID", width=0, stretch=False)
-        self.fin_table.column("BEDSPACER", width=250, anchor="w")
-        self.fin_table.column("Due date", width=120, anchor="center")
-        self.fin_table.column("Monthly", width=120, anchor="center")
-        self.fin_table.column("Remarks", width=250, anchor="w")
-        self.fin_table.column("Last Edited", width=160, anchor="center")
+        self.reset_fin_columns()
 
         self.fin_table.pack(fill="both", expand=True)
-
         self.fin_table.bind("<Double-1>", self.open_remarks_popup)
 
         self.total_frame = ctk.CTkFrame(self.fin_content, fg_color="transparent")
@@ -421,7 +427,6 @@ class TenantTrackerApp(ctk.CTk):
         
         for t in tenants:
             tid, name, due_date, monthly = t
-            
             monthly_val = self.safe_float(monthly)
             
             cursor.execute("SELECT remarks, last_edited FROM rent_ledger WHERE tenant_id=? AND month_year=?", (tid, month_str))
@@ -497,7 +502,8 @@ class TenantTrackerApp(ctk.CTk):
             messagebox.showinfo("Export Successful", f"Monthly Rental Report neatly formatted and saved to:\n\n{file_path}")
         except Exception as e:
             messagebox.showerror("Export Failed", f"Could not export file: {str(e)}")
-            # ==========================================
+
+    # ==========================================
     # TAB 3: MONTHLY SUMMARY (GLORIFIED EXCEL)
     # ==========================================
     def trigger_summary_update(self, *args):
@@ -523,6 +529,19 @@ class TenantTrackerApp(ctk.CTk):
         self.header_top = ctk.CTkFrame(self.dash_frame, fg_color="transparent")
         self.header_top.pack(fill="x", pady=(0, 10))
         ctk.CTkLabel(self.header_top, text="Monthly Expenses & Summary", font=ctk.CTkFont(size=24, weight="bold")).pack(side="left")
+
+        # UI Fix: Add Refresh & Reset Buttons to the FAR RIGHT
+        self.reset_sum_cols_btn = ctk.CTkButton(
+            self.header_top, text="Reset Columns", command=self.reset_sum_columns, 
+            width=100, fg_color=("#d3d3d3", "#565b5e"), hover_color=("#c8c8c8", "#343638"), text_color=("black", "white")
+        )
+        self.reset_sum_cols_btn.pack(side="right", padx=(5, 0))
+
+        self.refresh_sum_btn = ctk.CTkButton(
+            self.header_top, text="Refresh", command=self.load_summary_table, 
+            width=80, fg_color="#1f538d", hover_color="#14375e", text_color="white"
+        )
+        self.refresh_sum_btn.pack(side="right", padx=(20, 5))
 
         current_year = str(datetime.now().year)
         current_month = str(datetime.now().strftime('%m'))
@@ -558,12 +577,7 @@ class TenantTrackerApp(ctk.CTk):
         self.sum_table.configure(yscrollcommand=self.sum_scroll_y.set)
         
         for col in self.sum_cols: self.sum_table.heading(col, text=col)
-        self.sum_table.column("ID", width=0, stretch=False)
-        self.sum_table.column("Category", width=200, anchor="w")
-        self.sum_table.column("Description", width=250, anchor="w")
-        self.sum_table.column("Amount", width=150, anchor="center")
-        self.sum_table.column("Total", width=150, anchor="center")
-        self.sum_table.column("Remarks / OK", width=150, anchor="center")
+        self.reset_sum_columns()
         self.sum_table.pack(fill="both", expand=True)
 
         self.sum_table.bind("<Double-1>", self.open_summary_edit_popup)
@@ -796,8 +810,7 @@ class TenantTrackerApp(ctk.CTk):
             messagebox.showinfo("Export Successful", f"Summary cleanly exported to:\n\n{file_path}")
         except Exception as e:
             messagebox.showerror("Export Failed", f"Could not export file: {str(e)}")
-
-    # ==========================================
+            # ==========================================
     # TAB 4: SETTINGS & BACKUPS
     # ==========================================
     def setup_settings_tab(self):
@@ -848,11 +861,9 @@ class TenantTrackerApp(ctk.CTk):
         self.save_settings_btn = ctk.CTkButton(self.left_settings, text="Save Email & Automation Settings", command=self.save_app_settings, fg_color="green", hover_color="darkgreen", text_color="white")
         self.save_settings_btn.pack(anchor="w", padx=10, pady=10)
 
-        # TEST EMAIL BUTTON
         self.test_email_btn = ctk.CTkButton(self.left_settings, text="Test Email Connection", command=self.send_test_email, fg_color="#B8860B", hover_color="#8B6508", text_color="white")
         self.test_email_btn.pack(anchor="w", padx=10, pady=10)
 
-        # THE REAL BUTTON: Process and Send to Tenants
         self.send_reminders_btn = ctk.CTkButton(self.left_settings, text="🚀 Scan & Send Reminders Now", command=self.send_real_reminders, fg_color="#8B0000", hover_color="#660000", text_color="white", font=ctk.CTkFont(weight="bold"))
         self.send_reminders_btn.pack(anchor="w", padx=10, pady=(10, 20))
 
@@ -933,7 +944,8 @@ class TenantTrackerApp(ctk.CTk):
                 sys.exit()
             except Exception as e:
                 messagebox.showerror("Restore Failed", f"An error occurred: {str(e)}")
-                # ==========================================
+
+    # ==========================================
     # HELPER AND GLOBAL FUNCTIONS
     # ==========================================
     def get_active_tenant_names(self):
@@ -1043,6 +1055,22 @@ class TenantTrackerApp(ctk.CTk):
         widths = {"ID": 40, "Status": 80, "Name": 180, "Address": 280, "Room": 60, "Started": 100, "Term": 80, "Move Out": 100, "Monthly": 90, "Due Date": 100, "Valid ID": 130, "Job": 140, "Messenger": 180, "Email": 220, "Contact": 120, "Notes": 250, "Agreement": 80, "Advance": 80, "Deposit": 80, "Last Edited": 170}
         for col, w in widths.items():
             self.tenant_table.column(col, width=w, anchor="w" if col in ["Name", "Address", "Messenger", "Email", "Notes", "Job", "Valid ID"] else "center")
+
+    def reset_fin_columns(self):
+        self.fin_table.column("ID", width=0, stretch=False)
+        self.fin_table.column("BEDSPACER", width=250, anchor="w")
+        self.fin_table.column("Due date", width=120, anchor="center")
+        self.fin_table.column("Monthly", width=120, anchor="center")
+        self.fin_table.column("Remarks", width=250, anchor="w")
+        self.fin_table.column("Last Edited", width=160, anchor="center")
+
+    def reset_sum_columns(self):
+        self.sum_table.column("ID", width=0, stretch=False)
+        self.sum_table.column("Category", width=200, anchor="w")
+        self.sum_table.column("Description", width=250, anchor="w")
+        self.sum_table.column("Amount", width=150, anchor="center")
+        self.sum_table.column("Total", width=150, anchor="center")
+        self.sum_table.column("Remarks / OK", width=150, anchor="center")
 
     def toggle_form(self):
         if self.form_visible:
